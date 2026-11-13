@@ -1,0 +1,12 @@
+numpy
+pandas
+opencv-python-headless
+Pillow
+cryptography
+python-dotenv
+matplotlib
+pytest
+pytest-cov
+bandit
+pip-audit
+# face_recognition (dlib) is added in Step 3 after install testing
