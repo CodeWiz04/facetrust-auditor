@@ -1,0 +1,71 @@
+# ===== Secrets and keys (never commit) =====
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+secrets.json
+
+# ===== Private / biometric data (never commit) =====
+# Only the sanitized, consented samples in fixtures/sample_images/ are allowed.
+data/
+data/private/
+embeddings/
+uploads/
+quarantine/
+exports/
+reports/private/
+*.npy
+*.npz
+*.enc
+
+# ===== Local databases and logs =====
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.log
+logs/
+audit_logs/
+
+# ===== Python =====
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# ===== Test, coverage and tool caches =====
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.ruff_cache/
+.mypy_cache/
+.bandit/
+
+# ===== Generated outputs (recreate with scripts) =====
+fixtures/generated/
+fixtures/degraded/
+*.tmp
+
+# ===== Node / frontend (Member C) =====
+node_modules/
+npm-debug.log*
+.vite/
+
+# ===== Editors and OS =====
+.vscode/*
+!.vscode/settings.json.example
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
