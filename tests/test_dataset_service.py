@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
 from app.core.crypto import generate_biometric_key, set_active_key
+from app.core.errors import AppError
 from app.db.base import Base
 from app.models.audit import AuditLog
 from app.models.dataset import ConsentStatus, Subject, SubjectImage
@@ -207,3 +208,33 @@ def test_list_and_get_subjects(db_session: Session):
     assert s0.subject_code == "sub_multi_0"
     s0_by_id = get_subject(db_session, s0.id)
     assert s0_by_id.id == s0.id
+
+
+def test_get_subject_not_found_raises_app_error(db_session: Session):
+    with pytest.raises(AppError) as exc_info:
+        get_subject(db_session, "non_existent_id")
+    assert exc_info.value.code == "NOT-FOUND"
+    assert exc_info.value.status_code == 404
+
+
+def test_get_decrypted_image_file_missing(db_session: Session, sample_png_bytes: bytes):
+    payload = SubjectCreate(
+        subject_code="sub_missing_file",
+        consent_given=True,
+        consent_date=str(date.today()),
+        purpose="evaluation",
+    )
+    subject = create_subject(db_session, payload)
+    img_rec = ingest_subject_image(
+        db_session, subject.id, sample_png_bytes, "photo.png"
+    )
+
+    # Delete underlying file
+    storage_file = Path(get_settings().storage_dir) / img_rec.storage_path
+    if storage_file.exists():
+        storage_file.unlink()
+
+    with pytest.raises(AppError) as exc_info:
+        get_decrypted_image(img_rec)
+    assert exc_info.value.code == "NOT-FOUND"
+    assert exc_info.value.status_code == 404

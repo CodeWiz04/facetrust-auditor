@@ -15,7 +15,8 @@ import uuid
 from pathlib import Path
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, selectinload
 
 from app.core import audit
 from app.core.config import get_settings
@@ -47,7 +48,7 @@ def _sanitize_filename(filename: str) -> str:
 
 def _get_storage_root() -> Path:
     settings = get_settings()
-    root = Path(settings.storage_dir) / "images"
+    root = Path(settings.storage_dir).resolve() / "images"
     root.mkdir(parents=True, exist_ok=True)
     return root
 
@@ -86,8 +87,16 @@ def create_subject(
         purpose=validated_consent.purpose,
         group=validated_consent.group,
     )
-    db.add(subject)
-    db.commit()
+    try:
+        db.add(subject)
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise EngineError("CON-INVALID", f"Subject code '{payload.subject_code}' already exists") from exc
+    except Exception:
+        db.rollback()
+        raise
+
     db.refresh(subject)
 
     # Audit log
@@ -112,10 +121,12 @@ def create_subject(
 def get_subject(db: Session, subject_id: str) -> Subject:
     """Fetch subject by internal UUID or subject_code."""
     subject = db.scalar(
-        select(Subject).where((Subject.id == subject_id) | (Subject.subject_code == subject_id))
+        select(Subject)
+        .options(selectinload(Subject.images))
+        .where((Subject.id == subject_id) | (Subject.subject_code == subject_id))
     )
     if not subject:
-        raise AppError("NOT-FOUND", f"Subject '{subject_id}' not found", status_code=404)
+        raise AppError("NOT-FOUND", detail=f"Subject '{subject_id}' not found")
     return subject
 
 
@@ -127,7 +138,7 @@ def list_subjects(
     limit: int = 50,
 ) -> tuple[list[Subject], int]:
     """List subjects with optional filters."""
-    query = select(Subject)
+    query = select(Subject).options(selectinload(Subject.images))
     if group:
         query = query.where(Subject.group == group.lower())
     if consent_status:
@@ -180,43 +191,49 @@ def ingest_subject_image(
     encrypted_payload = encrypt_bytes(validated.png_bytes)
     full_path.write_bytes(encrypted_payload)
 
-    # Persist database record
-    subject_image = SubjectImage(
-        id=image_id,
-        subject_id=subject.id,
-        original_filename=_sanitize_filename(original_filename),
-        input_hash=validated.input_ref,
-        clean_hash=validated.clean_ref,
-        storage_path=f"images/{storage_filename}",
-        width=validated.width,
-        height=validated.height,
-        detected_type=validated.detected_type,
-    )
-    db.add(subject_image)
+    try:
+        # Persist database record
+        subject_image = SubjectImage(
+            id=image_id,
+            subject_id=subject.id,
+            original_filename=_sanitize_filename(original_filename),
+            input_hash=validated.input_ref,
+            clean_hash=validated.clean_ref,
+            storage_path=f"images/{storage_filename}",
+            width=validated.width,
+            height=validated.height,
+            detected_type=validated.detected_type,
+        )
+        db.add(subject_image)
 
-    # Generate initial biometric embedding (128-dimensional synthetic embedding based on clean hash)
-    # This guarantees FR-2 encrypted embedding generation on ingestion
-    dim = 128
-    # Deterministic float values derived from the image clean hash
-    hash_bytes = bytes.fromhex(validated.clean_ref.replace("sha256:", ""))
-    synthetic_vector = [
-        round(((hash_bytes[i % len(hash_bytes)] / 255.0) * 2.0 - 1.0) * 0.1, 6)
-        for i in range(dim)
-    ]
-    encrypted_token = encrypt_embedding(synthetic_vector)
+        # Generate initial biometric embedding (128-dimensional synthetic embedding based on clean hash)
+        dim = 128
+        hash_bytes = bytes.fromhex(validated.clean_ref.replace("sha256:", ""))
+        synthetic_vector = [
+            round(((hash_bytes[i % len(hash_bytes)] / 255.0) * 2.0 - 1.0) * 0.1, 6)
+            for i in range(dim)
+        ]
+        encrypted_token = encrypt_embedding(synthetic_vector)
 
-    embedding = BiometricEmbedding(
-        id=str(uuid.uuid4()),
-        image_id=subject_image.id,
-        subject_id=subject.id,
-        model_name="facenet",
-        model_version="1.0.0",
-        encrypted_embedding=encrypted_token,
-        vector_dim=dim,
-    )
-    db.add(embedding)
+        embedding = BiometricEmbedding(
+            id=str(uuid.uuid4()),
+            image_id=subject_image.id,
+            subject_id=subject.id,
+            model_name="facenet",
+            model_version="1.0.0",
+            encrypted_embedding=encrypted_token,
+            vector_dim=dim,
+        )
+        db.add(embedding)
 
-    db.commit()
+        db.commit()
+    except Exception:
+        db.rollback()
+        # Clean up encrypted file on failure to prevent dangling files
+        if full_path.exists():
+            full_path.unlink()
+        raise
+
     db.refresh(subject_image)
 
     # Audit event (PII-free)
@@ -242,11 +259,19 @@ def ingest_subject_image(
 def get_decrypted_image(subject_image: SubjectImage) -> bytes:
     """Retrieve and decrypt clean image bytes from storage at rest."""
     settings = get_settings()
-    full_path = Path(settings.storage_dir) / subject_image.storage_path
-    if not full_path.exists():
-        raise AppError("NOT-FOUND", "Image data file is missing from storage", status_code=404)
+    storage_root = Path(settings.storage_dir).resolve()
+    target_path = (storage_root / subject_image.storage_path).resolve()
 
-    ciphertext = full_path.read_bytes()
+    # Defense-in-depth: Ensure target_path resides within storage_root
+    try:
+        target_path.relative_to(storage_root)
+    except ValueError as exc:
+        raise AppError("AUTH-FORBIDDEN", detail="Access outside storage directory is forbidden") from exc
+
+    if not target_path.exists():
+        raise AppError("NOT-FOUND", detail="Image data file is missing from storage")
+
+    ciphertext = target_path.read_bytes()
     return decrypt_bytes(ciphertext)
 
 
