@@ -14,6 +14,8 @@
   "limits": {
     "max_image_bytes": 5000000,
     "max_dimension": 4000,
-    "min_dimension": 100
+    "min_dimension": 100,
+    "max_manifest_bytes": 1000000,
+    "max_manifest_rows": 5000
   }
 }
