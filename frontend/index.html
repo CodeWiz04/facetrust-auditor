@@ -11,17 +11,7 @@
     <!-- Top Telemetry Header -->
     <header class="telemetry-header">
       <div class="brand-section">
-        <div class="brand-icon-wrapper" data-icon="shield"></div>
-        <div>
-          <div class="brand-title">
-            FaceTrust Auditor
-            <span class="brand-badge">Proposal 20</span>
-          </div>
-          <div style="font-size: 11px; color: var(--text-tertiary); font-family: var(--font-mono);">
-            Class 2, Group 5 • Facial Recognition Security Lab
-          </div>
-        </div>
-      </div>
+       
 
       <div class="telemetry-pills">
         <div class="telemetry-pill" id="backend-status-pill">
@@ -36,7 +26,16 @@
         </div>
       </div>
 
-   
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div class="role-badge-control">
+          <button class="role-btn active admin" data-role="admin">Admin</button>
+          <button class="role-btn" data-role="analyst">Analyst</button>
+          <button class="role-btn" data-role="viewer">Viewer</button>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="window.app.runAllEvaluations()" title="Run Mandatory Evaluation Cases T1-T6">
+          <span data-icon="play"></span> Run Tests
+        </button>
+      </div>
     </header>
 
     <!-- App Body (Sidebar + Viewport) -->
