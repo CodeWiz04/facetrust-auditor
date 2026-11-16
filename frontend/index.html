@@ -1,13 +1,706 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FaceTrust Auditor | Recognition Bias & Spoofing Security Lab</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Telemetry Header -->
+    <header class="telemetry-header">
+      <div class="brand-section">
+        <div class="brand-icon-wrapper" data-icon="shield"></div>
+        <div>
+          <div class="brand-title">
+            FaceTrust Auditor
+            <span class="brand-badge">Proposal 20</span>
+          </div>
+          <div style="font-size: 11px; color: var(--text-tertiary); font-family: var(--font-mono);">
+            Class 2, Group 5 • Facial Recognition Security Lab
+          </div>
+        </div>
+      </div>
+
+      <div class="telemetry-pills">
+        <div class="telemetry-pill" id="backend-status-pill">
+          <span class="status-dot warning"></span> Security Engine: Active (Lab Mode)
+        </div>
+        <div class="telemetry-pill" title="Cryptographic Config Hash (engine/hashing.py)">
+          <span style="color: var(--accent-amber);">CFG:</span>
+          <span id="config-hash-pill" style="color: var(--text-primary);">sha256:...</span>
+        </div>
+        <div class="telemetry-pill" id="audit-chain-pill" title="Append-Only Tamper-Evident Hash Chain">
+          <span class="status-dot active"></span> Chain Valid (6 blocks)
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div class="role-badge-control">
+          <button class="role-btn active admin" data-role="admin">Admin</button>
+          <button class="role-btn" data-role="analyst">Analyst</button>
+          <button class="role-btn" data-role="viewer">Viewer</button>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="window.app.runAllEvaluations()" title="Run Mandatory Evaluation Cases T1-T6">
+          <span data-icon="play"></span> Run Tests
+        </button>
+      </div>
+    </header>
+
+    <!-- App Body (Sidebar + Viewport) -->
+    <div class="app-body">
+      <!-- Sidebar Navigation -->
+      <aside class="app-sidebar">
+        <div>
+          <div class="nav-group">
+            <div class="nav-group-title">Workbench</div>
+            <div class="nav-item active" data-view="dashboard">
+              <div class="nav-item-content">
+                <span class="nav-icon" data-icon="activity"></span>
+                <span>System Overview</span>
+              </div>
+            </div>
+            <div class="nav-item" data-view="dataset">
+              <div class="nav-item-content">
+                <span class="nav-icon" data-icon="database"></span>
+                <span>Consented Dataset (FR-1)</span>
+              </div>
+              <span class="nav-badge" id="sidebar-subject-count">5</span>
+            </div>
+            <div class="nav-item" data-view="embeddings">
+              <div class="nav-item-content">
+                <span class="nav-icon" data-icon="fingerprint"></span>
+                <span>Biometric Vectors (FR-2)</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="nav-group">
+            <div class="nav-group-title">Security Lab</div>
+            <div class="nav-item" data-view="threshold">
+              <div class="nav-item-content">
+                <span class="nav-icon" data-icon="sliders"></span>
+                <span>Threshold Tuning (FR-3)</span>
+              </div>
+            </div>
+            <div class="nav-item" data-view="subgroups">
+              <div class="nav-item-content">
+                <span class="nav-icon" data-icon="users"></span>
+                <span>Demographic Bias (FR-4)</span>
+              </div>
+            </div>
+            <div class="nav-item" data-view="liveness">
+              <div class="nav-item-content">
+                <span class="nav-icon" data-icon="crosshair"></span>
+                <span>Liveness & PAD (FR-5)</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="nav-group">
+            <div class="nav-group-title">Compliance & Auditing</div>
+            <div class="nav-item" data-view="deletion">
+              <div class="nav-item-content">
+                <span class="nav-icon" data-icon="trash2"></span>
+                <span>Privacy Deletion (FR-6)</span>
+              </div>
+            </div>
+            <div class="nav-item" data-view="evaluation">
+              <div class="nav-item-content">
+                <span class="nav-icon" data-icon="checkCircle"></span>
+                <span>Evaluation Suite (T1-T6)</span>
+              </div>
+              <span class="badge badge-success" style="font-size: 10px;">7/7</span>
+            </div>
+            <div class="nav-item" data-view="audit">
+              <div class="nav-item-content">
+                <span class="nav-icon" data-icon="link"></span>
+                <span>Audit Hash Chain</span>
+              </div>
+              <span class="nav-badge" id="sidebar-audit-count">6</span>
+            </div>
+            <div class="nav-item" data-view="reports">
+              <div class="nav-item-content">
+                <span class="nav-icon" data-icon="fileText"></span>
+                <span>Sanitized Reports</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="nav-group">
+            <div class="nav-group-title">Administration</div>
+            <div class="nav-item" data-view="policy">
+              <div class="nav-item-content">
+                <span class="nav-icon" data-icon="lock"></span>
+                <span>Policy & Tunables</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding: 12px 10px; border-top: 1px solid var(--border-subtle); font-size: 11px; color: var(--text-tertiary);">
+          <div>Engine Version: <strong style="color: var(--text-secondary);">v0.1.0</strong></div>
+          <div>Cryptographic Mode: <strong style="color: var(--accent-emerald);">AES-Fernet</strong></div>
+        </div>
+      </aside>
+
+      <!-- Viewport Content Area -->
+      <main class="app-viewport">
+        <!-- Restricted Viewer Banner (shown when Viewer role is active) -->
+        <div id="restricted-view-banner" style="display: none; background: rgba(100, 116, 139, 0.15); border: 1px solid var(--border-medium); border-radius: var(--radius-sm); padding: 10px 16px; margin-bottom: 20px;">
+          <div style="display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--text-primary); font-size: 13px;">
+            <span data-icon="eye"></span> Restricted Viewer Mode Active
+          </div>
+          <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">
+            End-user authorization policy enforced: Administrative actions, raw biometric vectors, and PII are redacted.
+          </div>
+        </div>
+
+        <!-- ================= VIEW 1: DASHBOARD ================= -->
+        <section id="view-dashboard" class="view-section active">
+          <div class="section-header">
+            <div>
+              <h1 class="section-title">
+                <span data-icon="activity"></span> Facial Recognition Security Lab Console
+              </h1>
+              <p class="section-subtitle">
+                Continuous auditability, explainable biometric matching decisions, and presentation attack mitigation.
+              </p>
+            </div>
+            <div class="section-actions">
+              <button class="btn btn-secondary btn-sm" onclick="window.print()">
+                <span data-icon="download"></span> Print Report
+              </button>
+            </div>
+          </div>
+
+          <div class="grid-4" style="margin-bottom: 20px;">
+            <div class="stat-card">
+              <div class="stat-label">Active Consented Subjects <span data-icon="users"></span></div>
+              <div class="stat-value" id="dash-stat-subjects">4</div>
+              <div class="stat-meta" style="color: var(--accent-emerald);">All subjects verified with ISO-8601 consent</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Withdrawn / Zeroized <span data-icon="trash2"></span></div>
+              <div class="stat-value" id="dash-stat-withdrawn">1</div>
+              <div class="stat-meta" style="color: var(--text-tertiary);">Cryptographically tombstoned (FR-6)</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Audit Chain Events <span data-icon="link"></span></div>
+              <div class="stat-value" id="dash-stat-audit">6</div>
+              <div class="stat-meta" style="color: var(--accent-cyan);">Append-only SHA-256 blocks</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Cryptographic Integrity <span data-icon="shield"></span></div>
+              <div class="stat-value" id="dash-stat-chain" style="color: var(--accent-emerald);">100% INTACT</div>
+              <div class="stat-meta" style="color: var(--accent-emerald);">Zero broken sequence links</div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title"><span data-icon="sliders"></span> Operating Point Telemetry</div>
+                <span class="card-tag">FR-3</span>
+              </div>
+              <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px;">
+                Current decision boundary balance between False Accept Rate (FAR) and False Reject Rate (FRR).
+              </p>
+              <div style="background: var(--bg-surface-2); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 12px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                  <span style="color: var(--text-secondary); font-size: 12px;">Active Matching Threshold (θ)</span>
+                  <strong style="color: var(--accent-amber); font-family: var(--font-mono);">0.50</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                  <span style="color: var(--text-secondary); font-size: 12px;">Target False Accept Rate (FAR)</span>
+                  <strong style="color: var(--accent-crimson); font-family: var(--font-mono);">1.00% (High Security)</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span style="color: var(--text-secondary); font-size: 12px;">Equal Error Rate (EER) Crossing</span>
+                  <strong style="color: var(--accent-emerald); font-family: var(--font-mono);">4.50% at θ = 0.50</strong>
+                </div>
+              </div>
+              <button class="btn btn-secondary btn-sm" onclick="window.app.switchView('threshold')">
+                Open Threshold Tuning Lab →
+              </button>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title"><span data-icon="fileText"></span> Append-Only Audit Stream</div>
+                <span class="card-tag">FR-1 / FR-6</span>
+              </div>
+              <div id="dash-recent-audit"></div>
+              <div style="margin-top: 14px;">
+                <button class="btn btn-secondary btn-sm" onclick="window.app.switchView('audit')">
+                  Inspect Cryptographic Hash Chain →
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= VIEW 2: DATASET (FR-1) ================= -->
+        <section id="view-dataset" class="view-section">
+          <div class="section-header">
+            <div>
+              <h1 class="section-title"><span data-icon="database"></span> Consented Dataset Management (FR-1)</h1>
+              <p class="section-subtitle">
+                Controlled volunteer onboarding with strict input validation, consent timestamps, and zero unconsented data retention.
+              </p>
+            </div>
+            <div class="section-actions">
+              <button class="btn btn-primary btn-sm" onclick="window.app.openRegisterModal()">
+                + Register Consented Subject
+              </button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Enrolled Subject Registry</div>
+              <span class="card-tag">Strict Consent Schema</span>
+            </div>
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Subject Identifier</th>
+                    <th>Consent Status</th>
+                    <th>Consent Date</th>
+                    <th>Permitted Purpose</th>
+                    <th>Demographic Subgroup</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="dataset-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><span data-icon="camera"></span> Image Ingestion Security Pipeline</div>
+              <span class="card-tag">Strict Server Validation</span>
+            </div>
+            <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">
+              Uploaded images undergo 6-stage sanitization: Size check (max 5 MB) → Magic byte verification → Header dimension check → Full pixel decode → EXIF metadata stripping → AES-Fernet encryption at rest.
+            </p>
+            <div class="dropzone" id="image-upload-dropzone" onclick="document.getElementById('hidden-file-input').click()">
+              <input type="file" id="hidden-file-input" style="display: none;" accept="image/png, image/jpeg">
+              <div class="dropzone-icon" data-icon="camera"></div>
+              <div style="font-weight: 600; font-size: 13px; color: var(--text-primary); margin-bottom: 4px;">
+                Click or Drop Face Image to Validate & Encrypt
+              </div>
+              <div style="font-size: 11px; color: var(--text-tertiary);">
+                PNG or JPEG only • Max 5.0 MB • Minimum 100x100px • Strips EXIF / GPS payloads
+              </div>
+            </div>
+            <div id="upload-validation-result" style="margin-top: 14px; display: none;"></div>
+          </div>
+        </section>
+
+        <!-- ================= VIEW 3: EMBEDDINGS (FR-2) ================= -->
+        <section id="view-embeddings" class="view-section">
+          <div class="section-header">
+            <div>
+              <h1 class="section-title"><span data-icon="fingerprint"></span> Biometric Embeddings Lab (FR-2)</h1>
+              <p class="section-subtitle">
+                128-dimensional biometric vector feature extraction, vector heatmaps, and explainable similarity matching.
+              </p>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Probe Sample Vector (128-d)</div>
+                <span class="card-tag">Model: facenet:1.0.0</span>
+              </div>
+              <div class="chart-box" style="margin-bottom: 12px;">
+                <canvas id="probe-heatmap-canvas" height="110"></canvas>
+              </div>
+              <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary);">
+                Vector Dimension: <strong>128</strong> • L2-Normalized • Ciphertext Fernet Encrypted
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Enrolled Gallery Vector (128-d)</div>
+                <span class="card-tag">Gallery Match Target</span>
+              </div>
+              <div class="chart-box" style="margin-bottom: 12px;">
+                <canvas id="gallery-heatmap-canvas" height="110"></canvas>
+              </div>
+              <div style="font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary);">
+                Subject ID: <strong>SUB-ALICE-VANCE</strong> • Enrolled: 2026-11-01
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><span data-icon="crosshair"></span> Biometric Comparison & Explainable Decision</div>
+              <span class="card-tag">FR-2 / FR-3</span>
+            </div>
+            <div class="grid-2" style="margin-bottom: 14px;">
+              <div class="stat-card">
+                <div class="stat-label">Cosine Similarity Score (S)</div>
+                <div class="stat-value" id="embed-cosine-score" style="color: var(--accent-amber);">0.9842</div>
+                <div class="stat-meta">Allowed range: [-1.0, 1.0] (1.0 = identical)</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">Euclidean Distance (D)</div>
+                <div class="stat-value" id="embed-euclid-dist" style="color: var(--accent-cyan);">0.1779</div>
+                <div class="stat-meta">L2 vector separation metric</div>
+              </div>
+            </div>
+
+            <div id="embed-decision-box" class="explain-box success"></div>
+          </div>
+        </section>
+
+        <!-- ================= VIEW 4: THRESHOLD TUNING (FR-3) ================= -->
+        <section id="view-threshold" class="view-section">
+          <div class="section-header">
+            <div>
+              <h1 class="section-title"><span data-icon="sliders"></span> Matching Threshold Tuning & Curves (FR-3)</h1>
+              <p class="section-subtitle">
+                Interactive security vs usability trade-off modeling: False Accept Rate (FAR) vs False Reject Rate (FRR).
+              </p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Operating Threshold Slider</div>
+              <span class="card-tag">Dynamic θ Control</span>
+            </div>
+            <div class="slider-control">
+              <div class="slider-header">
+                <span>Decision Boundary Threshold (θ):</span>
+                <span class="slider-val" id="threshold-val-display">0.50</span>
+              </div>
+              <input type="range" id="threshold-slider" min="0.0" max="1.0" step="0.01" value="0.50">
+              <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">
+                <span>0.0 (High False Accept / Low Security)</span>
+                <span>0.50 (Balanced EER)</span>
+                <span>1.0 (High False Reject / High Security)</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid-3" style="margin-bottom: 20px;">
+            <div class="stat-card">
+              <div class="stat-label">False Accept Rate (FAR)</div>
+              <div class="stat-value" id="thresh-far-val" style="color: var(--accent-crimson);">1.00%</div>
+              <div class="stat-meta">Imposter accepted as genuine</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">False Reject Rate (FRR)</div>
+              <div class="stat-value" id="thresh-frr-val" style="color: var(--accent-cyan);">4.80%</div>
+              <div class="stat-meta">Genuine subject rejected</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Equal Error Rate (EER)</div>
+              <div class="stat-value" id="thresh-eer-val" style="color: var(--accent-emerald);">4.50% (θ=0.50)</div>
+              <div class="stat-meta">Optimal operating crossover</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">ROC & DET Operating Characteristics Curve</div>
+              <span class="card-tag">Interactive Canvas Chart</span>
+            </div>
+            <div class="chart-box">
+              <canvas id="threshold-roc-canvas" height="230"></canvas>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= VIEW 5: SUBGROUPS (FR-4) ================= -->
+        <section id="view-subgroups" class="view-section">
+          <div class="section-header">
+            <div>
+              <h1 class="section-title"><span data-icon="users"></span> Demographic Performance & Bias Auditing (FR-4)</h1>
+              <p class="section-subtitle">
+                Systematic bias evaluation across Gender, Age brackets, Fitzpatrick skin tones, and Lighting environments.
+              </p>
+            </div>
+          </div>
+
+          <div class="grid-3" style="margin-bottom: 20px;">
+            <div class="stat-card">
+              <div class="stat-label">Demographic Disparity Ratio</div>
+              <div class="stat-value" id="subgroup-disparity-ratio" style="color: var(--accent-amber);">1.42x</div>
+              <div class="stat-meta">Ratio between highest and lowest subgroup FNR</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Max Subgroup Error (FNR)</div>
+              <div class="stat-value" id="subgroup-max-fnr" style="color: var(--accent-crimson);">7.2%</div>
+              <div class="stat-meta">Female (50+, Dark skin tone)</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Min Subgroup Error (FNR)</div>
+              <div class="stat-value" id="subgroup-min-fnr" style="color: var(--accent-emerald);">3.8%</div>
+              <div class="stat-meta">Male (18-29, Light skin tone)</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">False Non-Match Rate (FNR) by Demographic Subgroup</div>
+              <span class="card-tag">Disparity Comparison</span>
+            </div>
+            <div class="chart-box" style="margin-bottom: 14px;">
+              <canvas id="subgroup-chart-canvas" height="240"></canvas>
+            </div>
+            <div class="explain-box">
+              <strong>Demographic Parity Guideline:</strong> Subgroup disparity ratio is currently <strong>1.42x</strong> (below 1.8x critical bias threshold).
+              Notice the <strong>N &lt; 30 sample size warning</strong> highlighted in amber for underrepresented groups as required by system configuration (<code>min_group_n = 30</code>).
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= VIEW 6: LIVENESS & PAD (FR-5) ================= -->
+        <section id="view-liveness" class="view-section">
+          <div class="section-header">
+            <div>
+              <h1 class="section-title"><span data-icon="crosshair"></span> Presentation Attack Detection (FR-5)</h1>
+              <p class="section-subtitle">
+                Forensic multi-cue liveness engine: Laplacian blur variance, FFT moire spectral power, specular reflection, and brightness balance.
+              </p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Select Adversarial / Normal Test Scenario</div>
+              <span class="card-tag">Pre-configured Fixtures</span>
+            </div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <button class="btn btn-secondary btn-sm" onclick="window.app.setLivenessScenario('live-control')">
+                Genuine Live Face (Normal)
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="window.app.setLivenessScenario('print-attack')">
+                Printed Photo Attack (Paper 2D)
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="window.app.setLivenessScenario('screen-replay')">
+                Screen Replay Attack (iPad OLED)
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="window.app.setLivenessScenario('underexposed-lighting')">
+                Low Light / Underexposed Edge Case
+              </button>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Multi-Cue Forensic Analysis Meters</div>
+                <span class="card-tag">Voting Policy</span>
+              </div>
+              <div id="liveness-meters-container"></div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Explainable Security Decision</div>
+                <span class="card-tag">Never Just "Unsafe"</span>
+              </div>
+              <div id="liveness-decision-box" class="explain-box success"></div>
+              <div style="margin-top: 14px; font-size: 11px; color: var(--text-tertiary); line-height: 1.6;">
+                <strong>Security Engine Policy:</strong> 2 or more cue violations required to declare presentation attack (<code>liveness.votes_required = 2</code>).
+                Specific rules fired (e.g. <code>LIV-BLUR-LOW</code>, <code>LIV-HF-EXCESSIVE</code>) are permanently recorded in the append-only audit trail.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= VIEW 7: PRIVACY DELETION (FR-6) ================= -->
+        <section id="view-deletion" class="view-section">
+          <div class="section-header">
+            <div>
+              <h1 class="section-title"><span data-icon="trash2"></span> Privacy-Preserving Deletion (FR-6)</h1>
+              <p class="section-subtitle">
+                Cryptographic zeroization and right-to-be-forgotten enforcement with verifiable tombstone audit logging.
+              </p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Execute Consent Revocation</div>
+              <span class="card-tag">High-Impact Action</span>
+            </div>
+            <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px;">
+              Revoking consent irreversibly destroys the encrypted biometric vector and deletes raw image ciphertext from disk. An immutable tombstone entry is appended to the audit hash chain without leaking personal data.
+            </p>
+            <div class="form-group" style="max-width: 400px;">
+              <label class="form-label">Select Active Consented Subject</label>
+              <select class="form-select" id="deletion-subject-select"></select>
+            </div>
+            <button class="btn btn-danger btn-sm" onclick="window.app.triggerWithdrawConsent(document.getElementById('deletion-subject-select').value)">
+              <span data-icon="trash2"></span> Revoke Consent & Cryptographically Zeroize
+            </button>
+          </div>
+        </section>
+
+        <!-- ================= VIEW 8: EVALUATION SUITE (T1-T6) ================= -->
+        <section id="view-evaluation" class="view-section">
+          <div class="section-header">
+            <div>
+              <h1 class="section-title"><span data-icon="checkCircle"></span> Mandatory Evaluation Test Suite</h1>
+              <p class="section-subtitle">
+                Automated execution of test cases T1 through T6 and T-final as mandated by Page 3 of the project specification.
+              </p>
+            </div>
+            <div class="section-actions">
+              <button class="btn btn-secondary btn-sm" onclick="window.app.exportCsv()">
+                <span data-icon="download"></span> Export CSV Results
+              </button>
+              <button class="btn btn-primary btn-sm" onclick="window.app.runAllEvaluations()">
+                <span data-icon="refreshCw"></span> Re-Run All Tests
+              </button>
+            </div>
+          </div>
+
+          <div id="evaluation-results-list"></div>
+        </section>
+
+        <!-- ================= VIEW 9: AUDIT CHAIN ================= -->
+        <section id="view-audit" class="view-section">
+          <div class="section-header">
+            <div>
+              <h1 class="section-title"><span data-icon="link"></span> Tamper-Evident Audit Hash Chain</h1>
+              <p class="section-subtitle">
+                Append-only cryptographic chain linking each event hash: <code>entry_hash = sha256(seq | event | prev_hash | payload | time)</code>.
+              </p>
+            </div>
+            <div class="section-actions">
+              <button class="btn btn-primary btn-sm" onclick="window.app.verifyChainManually()">
+                <span data-icon="shield"></span> Verify Chain Integrity
+              </button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Cryptographic Event Sequence</div>
+              <span class="card-tag">Append-Only Immutable Ledger</span>
+            </div>
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Seq #</th>
+                    <th>Security Event</th>
+                    <th>Actor Role</th>
+                    <th>Previous Block Hash</th>
+                    <th>Entry Hash</th>
+                    <th>Timestamp</th>
+                    <th>Tamper Simulator</th>
+                  </tr>
+                </thead>
+                <tbody id="audit-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= VIEW 10: REPORTS ================= -->
+        <section id="view-reports" class="view-section">
+          <div class="section-header">
+            <div>
+              <h1 class="section-title"><span data-icon="fileText"></span> Sanitized Audit & Evidence Package</h1>
+              <p class="section-subtitle">
+                PII-redacted defensible security report ready for reviewer evaluation and reproducible demonstration.
+              </p>
+            </div>
+            <div class="section-actions">
+              <button class="btn btn-secondary btn-sm" onclick="window.print()">
+                Print / Save PDF
+              </button>
+              <button class="btn btn-primary btn-sm" onclick="window.app.exportJson()">
+                <span data-icon="download"></span> Download Sanitized JSON
+              </button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Audit Package JSON Preview</div>
+              <span class="card-tag">PII Redacted (Fingerprinted)</span>
+            </div>
+            <pre id="report-json-preview" style="background: #07090D; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 14px; font-family: var(--font-mono); font-size: 11px; color: var(--accent-cyan); overflow-x: auto; max-height: 480px;"></pre>
+          </div>
+        </section>
+
+        <!-- ================= VIEW 11: POLICY TUNABLES (ADMIN ONLY) ================= -->
+        <section id="view-policy" class="view-section">
+          <div class="section-header">
+            <div>
+              <h1 class="section-title"><span data-icon="lock"></span> Security Policy Tunables (Admin Only)</h1>
+              <p class="section-subtitle">
+                Role-enforced configuration tunables. Modifications record a <code>CONFIG_CHANGED</code> audit event and bump config version.
+              </p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Tunables Configuration Allow-List</div>
+              <span class="card-tag">engine/policy.py</span>
+            </div>
+            <div id="policy-tunables-container"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Modal Dialog: Register Consented Subject -->
+  <div class="modal-backdrop" id="modal-register-subject">
+    <div class="modal-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="font-size: 16px; font-weight: 700; color: #F1F5F9;">Register Consented Subject (FR-1)</h3>
+        <button class="btn btn-secondary btn-sm modal-close-btn">✕</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Subject Identifier / Code</label>
+        <input type="text" id="reg-subject-code" class="form-input" placeholder="e.g. SUB-TAYLOR-SWIFT" required>
+        <div class="form-hint">Must match regex: <code>^[A-Za-z0-9_-]{3,64}$</code></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Consent Date (ISO-8601)</label>
+        <input type="date" id="reg-consent-date" class="form-input" value="2026-11-16" required>
+        <div class="form-hint">Must be past or present date</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Permitted Purpose</label>
+        <select id="reg-purpose" class="form-select">
+          <option value="evaluation">Model Evaluation</option>
+          <option value="threshold_tuning">Threshold Tuning</option>
+          <option value="bias_audit">Demographic Bias Auditing</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Demographic Subgroup Label</label>
+        <input type="text" id="reg-group" class="form-input" placeholder="e.g. female_18-29_type2" value="female_18-29_type2">
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+        <button class="btn btn-secondary btn-sm modal-close-btn">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="window.app.submitRegisterSubject()">
+          Sign Consent & Register
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script type="module" src="js/app.js"></script>
+</body>
 </html>

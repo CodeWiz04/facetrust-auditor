@@ -89,6 +89,29 @@ class AppController {
         document.querySelectorAll('.modal-backdrop').forEach(m => m.classList.remove('active'));
       });
     });
+
+    // Dropzone drag and drop
+    const dropzone = document.getElementById('image-upload-dropzone');
+    const fileInput = document.getElementById('hidden-file-input');
+    if (dropzone && fileInput) {
+      dropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropzone.classList.add('dragover');
+      });
+      dropzone.addEventListener('dragleave', () => {
+        dropzone.classList.remove('dragover');
+      });
+      dropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('dragover');
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+          this.handleFileSelect({ target: { files: e.dataTransfer.files } });
+        }
+      });
+      fileInput.addEventListener('change', (e) => {
+        this.handleFileSelect(e);
+      });
+    }
   }
 
   bindRoleControls() {
@@ -559,6 +582,44 @@ class AppController {
     }
     await api.withdrawConsent(subjectId);
     this.renderDatasetView();
+  }
+
+  async handleFileSelect(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const resultBox = document.getElementById('upload-validation-result');
+    if (!resultBox) return;
+
+    resultBox.style.display = 'block';
+    resultBox.innerHTML = `<div style="font-size:12px; color:#94A3B8;">Analyzing magic bytes and header dimensions...</div>`;
+
+    const validation = await preValidateImageFile(file);
+    if (validation.isValid) {
+      resultBox.className = 'explain-box success';
+      resultBox.innerHTML = `
+        <div style="font-weight:700; font-size:13px; color:var(--accent-emerald); margin-bottom:4px;">
+          ✓ Image Validation Passed (Server Specification Met)
+        </div>
+        <div style="color:#CBD5E1; font-size:12px; margin-bottom:6px;">
+          Format: <strong>${validation.detectedType.toUpperCase()}</strong> • Dimensions: <strong>${validation.width}x${validation.height} px</strong> • Size: <strong>${(validation.sizeBytes / 1024).toFixed(1)} KB</strong>
+        </div>
+        <div style="font-family:var(--font-mono); font-size:11px; color:#64748B; word-break:break-all;">
+          Input SHA-256 Hash: ${validation.inputHash}<br>
+          Status: Ready for EXIF stripping and AES-Fernet encryption at rest.
+        </div>
+      `;
+    } else {
+      resultBox.className = 'explain-box danger';
+      resultBox.innerHTML = `
+        <div style="font-weight:700; font-size:13px; color:var(--accent-crimson); margin-bottom:4px;">
+          ✗ Image Validation Failed (Input Rejected by Security Policy)
+        </div>
+        <ul style="padding-left:18px; color:#FCA5A5; font-size:12px;">
+          ${validation.issues.map(i => `<li><strong>${i.code}:</strong> ${i.message}</li>`).join('')}
+        </ul>
+      `;
+    }
   }
 }
 
