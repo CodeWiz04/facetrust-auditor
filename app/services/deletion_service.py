@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core import audit
@@ -34,14 +34,9 @@ def execute_privacy_deletion(
     ip: str | None = None,
 ) -> DeletionReceipt:
     """Permanently shred all biometrics and purge records for a subject (FR-6)."""
-    # 1. Fetch subject with all images and embeddings eager loaded
+    # 1. Fetch subject
     subject = db.scalar(
-        select(Subject)
-        .options(
-            selectinload(Subject.images).selectinload(SubjectImage.embeddings),
-            selectinload(Subject.embeddings),
-        )
-        .where((Subject.id == subject_id) | (Subject.subject_code == subject_id))
+        select(Subject).where((Subject.id == subject_id) | (Subject.subject_code == subject_id))
     )
     if not subject:
         raise AppError("NOT-FOUND", detail=f"Subject '{subject_id}' not found")
@@ -49,9 +44,14 @@ def execute_privacy_deletion(
     settings = get_settings()
     storage_root = Path(settings.storage_dir).resolve()
 
-    images_to_shred = list(subject.images)
+    # Query all images and embeddings directly to bypass any stale session cache
+    images_to_shred = list(
+        db.scalars(select(SubjectImage).where(SubjectImage.subject_id == subject.id)).all()
+    )
+    embeddings_count = db.scalar(
+        select(func.count()).select_from(BiometricEmbedding).where(BiometricEmbedding.subject_id == subject.id)
+    ) or 0
     shredded_count = 0
-    embeddings_count = len(subject.embeddings)
 
     # 2. Forensically shred all physical encrypted image files from storage
     for img in images_to_shred:
