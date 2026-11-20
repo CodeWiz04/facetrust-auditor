@@ -9,4 +9,14 @@ pytest
 pytest-cov
 bandit
 pip-audit
+
+# ===== Backend 1: auth & platform =====
+fastapi>=0.115,<1.0
+uvicorn>=0.30
+SQLAlchemy>=2.0,<3.0
+pydantic-settings>=2.4
+email-validator>=2.2
+bcrypt>=4.2
+httpx>=0.27
+
 # face_recognition (dlib) is added in Step 3 after install testing
