@@ -9,13 +9,16 @@ from app.schemas.dataset import (
     SubjectListResponse,
     SubjectResponse,
 )
+from app.schemas.deletion import DeletionReceipt, SubjectDeletionRequest
 
 __all__ = [
     "ConsentWithdrawRequest",
+    "DeletionReceipt",
     "EmbeddingMetadataResponse",
     "ImageListResponse",
     "ImageUploadResponse",
     "SubjectCreate",
+    "SubjectDeletionRequest",
     "SubjectListResponse",
     "SubjectResponse",
 ]
