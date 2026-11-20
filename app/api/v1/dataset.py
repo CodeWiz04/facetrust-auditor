@@ -23,7 +23,8 @@ from app.schemas.dataset import (
     SubjectListResponse,
     SubjectResponse,
 )
-from app.services import dataset_service
+from app.schemas.deletion import DeletionReceipt, SubjectDeletionRequest
+from app.services import dataset_service, deletion_service
 
 router = APIRouter(prefix="/dataset", tags=["dataset"])
 
@@ -158,3 +159,46 @@ def withdraw_consent(
     reason = payload.reason if payload else None
     subject = dataset_service.withdraw_consent(db, subject_id=subject_id, reason=reason, ip=ip)
     return _subject_to_response(subject)
+
+
+
+@router.delete(
+    "/subjects/{subject_id}",
+    response_model=DeletionReceipt,
+    summary="Permanently delete subject biometrics and records (FR-6, T6)",
+)
+def delete_subject(
+    subject_id: str,
+    request: Request,
+    payload: SubjectDeletionRequest | None = None,
+    db: Session = Depends(get_db),
+) -> DeletionReceipt:
+    """Permanently shred all biometrics, remove database rows, and record an immutable PII-free tombstone."""
+    ip = client_ip(request)
+    return deletion_service.execute_privacy_deletion(
+        db=db,
+        subject_id=subject_id,
+        request_data=payload,
+        ip=ip,
+    )
+
+
+@router.post(
+    "/subjects/{subject_id}/shred",
+    response_model=DeletionReceipt,
+    summary="Cryptographically shred biometrics with explicit confirmation",
+)
+def shred_subject_biometrics(
+    subject_id: str,
+    request: Request,
+    payload: SubjectDeletionRequest,
+    db: Session = Depends(get_db),
+) -> DeletionReceipt:
+    """Enforces explicit confirmation before permanently destroying all subject images and vectors."""
+    ip = client_ip(request)
+    return deletion_service.execute_privacy_deletion(
+        db=db,
+        subject_id=subject_id,
+        request_data=payload,
+        ip=ip,
+    )
