@@ -1,11 +1,4 @@
-"""Face embedding extraction (FR-2).
 
-The engine does not depend on any one face library. A *backend* turns an RGB
-image into zero or more embedding vectors; this module decides what that
-means (exactly one face required), validates and normalizes the vector, and
-returns an explainable Decision. The raw vector is returned separately and is
-NEVER placed in the Decision (so it cannot leak into logs or reports).
-"""
 
 from io import BytesIO
 from typing import Protocol
@@ -60,12 +53,6 @@ def _decode_rgb(image: ValidatedImage) -> np.ndarray:
 
 
 def extract_embedding(image: ValidatedImage, backend: EmbeddingBackend, config_hash: str):
-    """Run the backend and return (Decision, embedding | None).
-
-    Business rejections (no face, several faces, bad vector) are normal,
-    auditable Decisions. A crashing backend raises EngineError, with only the
-    exception TYPE recorded (messages could contain image data or paths).
-    """
     timer = Timer()
     rgb = _decode_rgb(image)
 
