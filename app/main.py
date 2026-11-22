@@ -39,6 +39,10 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         for problem in settings.insecure_defaults_in_use:
             logger.warning("development setting: %s", problem)
 
+    if settings.biometric_encryption_key:
+        from app.core.crypto import set_active_key
+        set_active_key(settings.biometric_encryption_key)
+
     if settings.auto_create_tables:
         init_db()
         logger.info("database tables ready (%s)", settings.database_url.split("?")[0])
