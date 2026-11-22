@@ -1,9 +1,4 @@
-"""Real face-recognition backends.
 
-Imports are lazy so the rest of the engine (and its tests) work on machines
-where dlib cannot be installed. If the library is missing you get a stable
-EMB-BACKEND-UNAVAILABLE error instead of an ImportError traceback.
-"""
 
 import numpy as np
 
