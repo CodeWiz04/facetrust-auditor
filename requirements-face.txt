@@ -1,0 +1,4 @@
+# Optional real face backend (needs: sudo apt install build-essential cmake).
+# Use Python 3.10-3.12. The setuptools pin avoids a pkg_resources error in face_recognition_models.
+setuptools<81
+face_recognition

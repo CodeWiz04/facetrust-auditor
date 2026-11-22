@@ -25,6 +25,11 @@ ERROR_CATALOG = {
     "EMB-NO-FACE": "No face was detected in the image.",
     "EMB-MULTI-FACE": "More than one face was detected; exactly one is required.",
     "EMB-INVALID-VECTOR": "The embedding vector is invalid.",
+    "EMB-BACKEND-UNAVAILABLE": "The face-recognition backend is not available.",
+    "EMB-BACKEND-ERROR": "The face-recognition backend failed to process the image.",
+    # Cryptography
+    "CRY-KEY-INVALID": "The encryption key is missing or invalid.",
+    "CRY-DECRYPT-FAILED": "The stored data could not be decrypted or has been tampered with.",
     # Metrics
     "DATA-INSUFFICIENT": "Not enough data to compute this result reliably.",
     # Configuration
