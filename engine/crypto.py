@@ -1,12 +1,4 @@
-"""Encryption of embeddings at rest (AES-256-GCM).
 
-An embedding is a biometric template, so it is never stored in plain form.
-- Key comes from the environment (FACETRUST_EMBEDDING_KEY, base64, 32 bytes), never from code.
-- A fresh random nonce is used for every encryption.
-- `aad` (associated data, e.g. subject + image hash) is authenticated but not
-  encrypted: a sealed blob cannot be moved to another record without detection.
-- Blob layout: 1 version byte | 12-byte nonce | ciphertext+tag.
-"""
 
 import base64
 import binascii
