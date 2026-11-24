@@ -1,7 +1,7 @@
 """Presentation-attack detection / basic liveness cues (FR-5, T4).
 
-Cues implemented:
-1. Blur & Sharpness: Variance of the Laplacian (catches soft prints and re-photographs).
+Cues implemented with pure NumPy and standard libraries:
+1. Blur & Sharpness: Variance of the discrete 2D Laplacian operator (catches soft prints and re-photographs).
 2. Frequency artifacts: 2D FFT energy distribution (catches screen moiré and display grids).
 3. Specular highlights: Saturated glare pixel ratio (catches screen glossy reflections).
 4. Dynamic range / Brightness: Mean luminance bounds check.
@@ -9,14 +9,48 @@ Cues implemented:
 
 from __future__ import annotations
 
-import cv2
 import numpy as np
 
 from .decision import Decision, Timer
 from .errors import EngineError
 
 
-def analyze_liveness_cues(rgb: np.ndarray, config: dict, input_ref: str, config_hash: str) -> tuple[Decision, dict[str, float]]:
+def compute_laplacian_variance(gray: np.ndarray) -> float:
+    """Discrete 2D Laplacian kernel [[0, 1, 0], [1, -4, 1], [0, 1, 0]] variance."""
+    if gray.shape[0] < 3 or gray.shape[1] < 3:
+        return 0.0
+    # Discrete 2D convolution with 4-neighborhood Laplacian kernel
+    laplacian = (
+        -4.0 * gray[1:-1, 1:-1]
+        + gray[:-2, 1:-1]
+        + gray[2:, 1:-1]
+        + gray[1:-1, :-2]
+        + gray[1:-1, 2:]
+    )
+    return float(np.var(laplacian))
+
+
+def compute_fft_hf_ratio(gray: np.ndarray) -> float:
+    """Compute high-frequency energy ratio in the 2D FFT magnitude spectrum."""
+    h, w = gray.shape
+    f_transform = np.fft.fft2(gray)
+    f_shift = np.fft.fftshift(f_transform)
+    magnitude_spectrum = np.abs(f_shift)
+
+    cy, cx = h // 2, w // 2
+    r = max(1, min(h, w) // 8)
+    y_idx, x_idx = np.ogrid[:h, :w]
+    low_freq_mask = (y_idx - cy) ** 2 + (x_idx - cx) ** 2 <= r ** 2
+
+    total_energy = float(np.sum(magnitude_spectrum))
+    low_freq_energy = float(np.sum(magnitude_spectrum[low_freq_mask]))
+    high_freq_energy = max(0.0, total_energy - low_freq_energy)
+    return float(high_freq_energy / (total_energy + 1e-9))
+
+
+def analyze_liveness_cues(
+    rgb: np.ndarray, config: dict, input_ref: str, config_hash: str
+) -> tuple[Decision, dict[str, float]]:
     """Evaluate liveness cues on an RGB image array and return an explainable Decision."""
     if not isinstance(rgb, np.ndarray) or rgb.ndim != 3 or rgb.shape[2] != 3:
         raise EngineError("FILE-CORRUPT", "Liveness evaluation requires 3-channel RGB image")
@@ -33,28 +67,14 @@ def analyze_liveness_cues(rgb: np.ndarray, config: dict, input_ref: str, config_
     h, w, _ = rgb.shape
     total_pixels = float(h * w)
 
-    # 1. Grayscale luminance
-    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    # 1. Grayscale luminance using standard ITU-R BT.601 conversion
+    gray = 0.299 * rgb[:, :, 0] + 0.587 * rgb[:, :, 1] + 0.114 * rgb[:, :, 2]
 
     # 2. Blur / Sharpness check via Laplacian variance
-    laplacian = cv2.Laplacian(gray, cv2.CV_64F)
-    blur_var = float(laplacian.var())
+    blur_var = compute_laplacian_variance(gray)
 
     # 3. Frequency domain analysis via 2D FFT (moiré / display grid)
-    f_transform = np.fft.fft2(gray)
-    f_shift = np.fft.fftshift(f_transform)
-    magnitude_spectrum = np.abs(f_shift)
-
-    # Compute high frequency ratio relative to total energy
-    cy, cx = h // 2, w // 2
-    r = max(1, min(h, w) // 8)
-    y_idx, x_idx = np.ogrid[:h, :w]
-    low_freq_mask = (y_idx - cy) ** 2 + (x_idx - cx) ** 2 <= r ** 2
-
-    total_energy = float(np.sum(magnitude_spectrum))
-    low_freq_energy = float(np.sum(magnitude_spectrum[low_freq_mask]))
-    high_freq_energy = max(0.0, total_energy - low_freq_energy)
-    hf_ratio = float(high_freq_energy / (total_energy + 1e-9))
+    hf_ratio = compute_fft_hf_ratio(gray)
 
     # 4. Specular glare analysis (saturated glossy reflections)
     saturated_pixels = int(
@@ -102,7 +122,6 @@ def analyze_liveness_cues(rgb: np.ndarray, config: dict, input_ref: str, config_
     is_attack = attack_votes >= votes_required
 
     # Aggregate liveness score [0.0 = definite spoof, 1.0 = genuine live face]
-    # Penalize 0.25 for each rule fired, bounded between 0.0 and 1.0
     liveness_score = max(0.0, min(1.0, 1.0 - (attack_votes * 0.25)))
 
     metrics = {
