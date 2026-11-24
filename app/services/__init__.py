@@ -17,13 +17,20 @@ from app.services.evaluation_service import (
     run_subgroup_bias_audit,
     run_threshold_evaluation,
 )
+from app.services.policy_service import (
+    get_active_policy,
+    get_policy_response,
+    update_system_policy,
+)
 
 __all__ = [
     "create_subject",
     "evaluate_liveness_sample",
     "execute_privacy_deletion",
+    "get_active_policy",
     "get_decrypted_image",
     "get_evaluation_run",
+    "get_policy_response",
     "get_subject",
     "ingest_subject_image",
     "list_evaluation_runs",
@@ -31,6 +38,7 @@ __all__ = [
     "policy_service",
     "run_subgroup_bias_audit",
     "run_threshold_evaluation",
+    "update_system_policy",
     "threshold_service",
     "withdraw_consent",
 ]

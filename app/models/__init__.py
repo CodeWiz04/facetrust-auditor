@@ -12,7 +12,7 @@ from app.models.evaluation import (
     EvaluationRun,
     EvaluationType,
 )
-from app.models.policy import PolicyVersion
+from app.models.policy import PolicyVersion, SystemPolicy
 from app.models.session import UserSession
 from app.models.user import User, UserRole
 
@@ -26,6 +26,7 @@ __all__ = [
     "PolicyVersion",
     "Subject",
     "SubjectImage",
+    "SystemPolicy",
     "User",
     "UserRole",
     "UserSession",
