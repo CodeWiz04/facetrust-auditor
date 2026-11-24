@@ -12,6 +12,7 @@ from app.services.deletion_service import execute_privacy_deletion
 from app.services.evaluation_service import (
     get_evaluation_run,
     list_evaluation_runs,
+    run_subgroup_bias_audit,
     run_threshold_evaluation,
 )
 
@@ -24,6 +25,7 @@ __all__ = [
     "ingest_subject_image",
     "list_evaluation_runs",
     "list_subjects",
+    "run_subgroup_bias_audit",
     "run_threshold_evaluation",
     "withdraw_consent",
 ]
