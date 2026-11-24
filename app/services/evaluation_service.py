@@ -10,9 +10,11 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from io import BytesIO
 from typing import Any, Sequence
 
 import numpy as np
+from PIL import Image
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
@@ -25,6 +27,7 @@ from app.models.evaluation import EvaluationResult, EvaluationRun, EvaluationTyp
 from app.schemas.evaluation import (
     EvaluationListResponse,
     EvaluationRunSummary,
+    LivenessCheckResponse,
     RocPoint,
     SubgroupBiasRequest,
     SubgroupBiasResponse,
@@ -32,9 +35,11 @@ from app.schemas.evaluation import (
     ThresholdEvalRequest,
     ThresholdEvalResponse,
 )
+from engine.dataset_validator import ValidatedImage, validate_image
 from engine.decision import Decision, Timer
 from engine.embeddings import cosine_score
 from engine.hashing import canonical_json, config_hash
+from engine.liveness import analyze_liveness_cues
 from engine.policy import load_default_config
 
 
@@ -581,6 +586,96 @@ def run_subgroup_bias_audit(
         disparity_ratio=disparity_ratio,
         summary=summary,
         decision=decision.to_dict(),
+    )
+
+
+def evaluate_liveness_sample(
+    db: Session,
+    file_bytes: bytes,
+    claimed_name: str = "liveness_sample.png",
+    actor_id: str | None = None,
+    actor_role: str | None = None,
+    ip: str | None = None,
+) -> LivenessCheckResponse:
+    """Validate an uploaded face sample, analyze liveness cues, and record tamper-evident audit decision (FR-5, T4)."""
+    config = load_default_config()
+    cfg_hash = config_hash(config)
+    limits = config["limits"]
+
+    # 1. Validate real image decode, bounds, type, and size
+    validated: ValidatedImage = validate_image(
+        file_bytes, limits=limits, claimed_name=claimed_name
+    )
+
+    # 2. Decode to RGB array
+    with Image.open(BytesIO(validated.png_bytes)) as img:
+        rgb = np.ascontiguousarray(np.asarray(img.convert("RGB"), dtype=np.uint8))
+
+    # 3. Security engine liveness analysis
+    decision, metrics = analyze_liveness_cues(
+        rgb, config=config, input_ref=validated.input_ref, config_hash=cfg_hash
+    )
+
+    is_attack = decision.status in ("rejected", "flagged")
+    liveness_score = float(decision.score if decision.score is not None else 0.0)
+    rules_fired = list(decision.rules_fired)
+    reasons = list(decision.reasons)
+
+    # 4. Record EvaluationRun and EvaluationResult
+    run = EvaluationRun(
+        run_type=EvaluationType.LIVENESS.value,
+        model_name="liveness-engine",
+        model_version="1.0.0",
+        config_hash=cfg_hash,
+        operating_threshold=None,
+        summary_metrics_json=canonical_json({
+            "input_hash": validated.input_ref,
+            "liveness_score": liveness_score,
+            "is_attack": is_attack,
+            "rules_fired": rules_fired,
+            **metrics,
+        }),
+        created_by=actor_id,
+        created_at=utcnow(),
+    )
+    db.add(run)
+    db.flush()
+
+    db.add(
+        EvaluationResult(
+            run_id=run.id,
+            category="liveness_sample",
+            item_key=validated.input_ref,
+            metrics_json=canonical_json(metrics),
+            decision_json=canonical_json(decision.to_dict()),
+            created_at=utcnow(),
+        )
+    )
+
+    # 5. Tamper-evident audit log
+    audit.record(
+        db,
+        event="EVALUATION_LIVENESS_COMPLETED",
+        actor_id=actor_id,
+        actor_role=actor_role,
+        ip=ip,
+        payload={
+            "run_id": run.id,
+            "input_hash": validated.input_ref,
+            "liveness_score": liveness_score,
+            "is_attack": is_attack,
+            "rules_fired": rules_fired,
+        },
+    )
+
+    return LivenessCheckResponse(
+        decision=decision.to_dict(),
+        liveness_score=liveness_score,
+        is_attack=is_attack,
+        cues=metrics,
+        rules_fired=rules_fired,
+        reasons=reasons,
+        input_hash=validated.input_ref,
     )
 
 

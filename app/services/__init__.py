@@ -10,6 +10,7 @@ from app.services.dataset_service import (
 )
 from app.services.deletion_service import execute_privacy_deletion
 from app.services.evaluation_service import (
+    evaluate_liveness_sample,
     get_evaluation_run,
     list_evaluation_runs,
     run_subgroup_bias_audit,
@@ -18,6 +19,7 @@ from app.services.evaluation_service import (
 
 __all__ = [
     "create_subject",
+    "evaluate_liveness_sample",
     "execute_privacy_deletion",
     "get_decrypted_image",
     "get_evaluation_run",
