@@ -46,6 +46,8 @@ ERROR_CATALOG: dict[str, tuple[int, str]] = {
     # Crypto / storage
     "FILE-CORRUPT": (422, "The file could not be read."),
     "DEL-VERIFY-FAILED": (409, "Verification failed."),
+    # Evaluation
+    "EVAL-INSUFFICIENT-DATA": (400, "Insufficient biometric data to perform evaluation."),
 }
 
 

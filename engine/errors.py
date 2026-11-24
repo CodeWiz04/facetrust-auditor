@@ -32,6 +32,13 @@ ERROR_CATALOG = {
     "CRY-DECRYPT-FAILED": "The stored data could not be decrypted or has been tampered with.",
     # Metrics
     "DATA-INSUFFICIENT": "Not enough data to compute this result reliably.",
+    # Liveness / Presentation-Attack
+    "LIV-BLURRY": "Image sharpness is too low for live presentation.",
+    "LIV-SCREEN-MOIRE": "High-frequency periodic texture detected hinting at screen replay.",
+    "LIV-GLARE-DETECTED": "Excessive specular reflection detected.",
+    "LIV-TOO-DARK": "Image is underexposed.",
+    "LIV-TOO-BRIGHT": "Image is overexposed.",
+    "LIV-ATTACK-DETECTED": "Presentation attack detected.",
     # Configuration
     "CFG-UNKNOWN-KEY": "That setting does not exist or cannot be changed.",
     "CFG-INVALID-TYPE": "The setting value has the wrong type.",
