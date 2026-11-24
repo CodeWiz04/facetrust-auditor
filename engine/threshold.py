@@ -1,7 +1,4 @@
-"""FR-3: Threshold tuning (security engine, Layer 3).
-
-Pure numpy - no web framework, no database. Every function here can be
-unit-tested on its own and is called by `app/services/threshold_service.py`.
+"""FR-3: Threshold tuning (security engine, Layer 3)..
 
 Decision rule used everywhere in this module:
 
@@ -26,9 +23,6 @@ What the module produces for one evaluation:
   target FAR statistically ("rule of three": with zero observed false
   accepts in n trials the 95% upper bound on FAR is about 3/n).
 
-Only aggregate statistics leave this module. No subject identifiers or raw
-embeddings are placed in the report, so stored evaluation results never
-need to be shredded by FR-6.
 """
 
 from __future__ import annotations
