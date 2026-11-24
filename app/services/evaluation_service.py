@@ -586,6 +586,7 @@ def run_subgroup_bias_audit(
         disparity_ratio=disparity_ratio,
         summary=summary,
         decision=decision.to_dict(),
+        created_at=run.created_at,
     )
 
 
@@ -669,13 +670,17 @@ def evaluate_liveness_sample(
     )
 
     return LivenessCheckResponse(
-        decision=decision.to_dict(),
-        liveness_score=liveness_score,
-        is_attack=is_attack,
-        cues=metrics,
+        decision_id=decision.decision_id,
+        status=decision.status,
+        outcome=decision.outcome,
+        score=liveness_score,
+        threshold=float(decision.threshold if decision.threshold is not None else 0.0),
+        severity=decision.severity,
         rules_fired=rules_fired,
         reasons=reasons,
-        input_hash=validated.input_ref,
+        metrics=metrics,
+        latency_ms=decision.latency_ms,
+        created_at=decision.created_at,
     )
 
 
@@ -698,11 +703,10 @@ def list_evaluation_runs(
             id=r.id,
             run_type=r.run_type,
             model_name=r.model_name,
-            model_version=r.model_version,
             operating_threshold=r.operating_threshold,
             created_by=r.created_by,
             created_at=r.created_at,
-            summary_metrics=json.loads(r.summary_metrics_json) if r.summary_metrics_json else {},
+            summary=json.loads(r.summary_metrics_json) if r.summary_metrics_json else {},
         )
         for r in runs
     ]
