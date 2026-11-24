@@ -14,15 +14,18 @@ from fastapi import (
     UploadFile,
     status,
 )
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
+from app.api.deps import get_db, require_csrf, require_roles_audited
+from app.api.v1 import thresholds
 from app.core.config import get_settings
 from app.core.errors import AppError
 from app.core.rate_limit import client_ip
 from app.core.security import hash_token
 from app.core.time import utcnow
 from app.models.session import UserSession
+from app.models.user import User, UserRole
 from app.schemas.evaluation import (
     EvaluationListResponse,
     LivenessCheckResponse,
@@ -37,7 +40,12 @@ router = APIRouter(prefix="/evaluations", tags=["evaluations"])
 
 
 def _resolve_actor(request: Request, db: Session) -> tuple[str, str]:
-    """Resolve caller's actor ID and role from active session or defaults."""
+    """Best-effort caller identity for audit entries of FR-4 / FR-5 endpoints.
+
+    (The previous version called a non-existent `Session.select`, so it
+    never found the session.) FR-3 endpoints do not use this: they require
+    an authenticated, authorized user via dependencies.
+    """
     settings = get_settings()
     token = request.cookies.get(settings.session_cookie_name)
     if not token:
@@ -46,13 +54,12 @@ def _resolve_actor(request: Request, db: Session) -> tuple[str, str]:
             token = auth_header.split(" ", 1)[1]
 
     if token:
-        thash = hash_token(token)
         session = db.scalar(
-            Session.select(UserSession).where(
-                UserSession.token_hash == thash,
+            select(UserSession).where(
+                UserSession.token_hash == hash_token(token),
                 UserSession.revoked_at.is_(None),
             )
-        ) if hasattr(Session, "select") else None
+        )
         if session and session.expires_at > utcnow() and session.user:
             return session.user.id, session.user.role
 
@@ -68,18 +75,17 @@ def _resolve_actor(request: Request, db: Session) -> tuple[str, str]:
 def evaluate_threshold(
     payload: ThresholdEvalRequest,
     request: Request,
+    user: User = Depends(require_roles_audited(
+        "threshold.evaluate", UserRole.ADMIN.value, UserRole.ANALYST.value
+    )),
+    _csrf: None = Depends(require_csrf),
     db: Session = Depends(get_db),
 ) -> ThresholdEvalResponse:
-    """Tune biometric match threshold, compute ROC/DET curve, EER, and FAR/FRR metrics."""
-    actor_id, actor_role = _resolve_actor(request, db)
-    ip = client_ip(request)
-    return evaluation_service.run_threshold_evaluation(
-        db=db,
-        request=payload,
-        actor_id=actor_id,
-        actor_role=actor_role,
-        ip=ip,
-    )
+    """Same as POST /api/v1/threshold/evaluate (kept for existing clients).
+
+    Requires an authenticated admin/analyst session and the X-CSRF-Token header.
+    """
+    return thresholds.run_evaluation(payload, request, user, db)
 
 
 @router.post(

@@ -126,54 +126,9 @@ def _enroll_sample_subject(
     return sub
 
 
-def test_threshold_evaluation_insufficient_data(test_setup):
-    client, _ = test_setup
-    res = client.post("/api/v1/evaluations/threshold", json={"model_name": "dlib-resnet-128d"})
-    assert res.status_code == 400
-    assert res.json()["error_code"] == "EVAL-INSUFFICIENT-DATA"
-
-
-def test_threshold_evaluation_success(test_setup):
-    client, SessionMaker = test_setup
-    db = SessionMaker()
-
-    # Generate distinct synthetic embeddings (128-d vectors)
-    np.random.seed(42)
-    # Subject 1 has 2 similar embeddings
-    base_v1 = np.random.randn(128)
-    v1_a = (base_v1 + np.random.randn(128) * 0.05).tolist()
-    v1_b = (base_v1 + np.random.randn(128) * 0.05).tolist()
-
-    # Subject 2 has 2 similar embeddings
-    base_v2 = np.random.randn(128)
-    v2_a = (base_v2 + np.random.randn(128) * 0.05).tolist()
-    v2_b = (base_v2 + np.random.randn(128) * 0.05).tolist()
-
-    _enroll_sample_subject(db, "SUB-001", "group_a", [v1_a, v1_b], model_name="dlib-resnet-128d")
-    _enroll_sample_subject(db, "SUB-002", "group_b", [v2_a, v2_b], model_name="dlib-resnet-128d")
-    db.close()
-
-    res = client.post(
-        "/api/v1/evaluations/threshold",
-        json={"model_name": "dlib-resnet-128d", "threshold_steps": 25},
-    )
-    assert res.status_code == 200
-    data = res.json()
-
-    assert data["model_name"] == "dlib-resnet-128d"
-    assert data["total_genuine_pairs"] == 2  # 1 pair for sub 1 + 1 pair for sub 2
-    assert data["total_impostor_pairs"] == 4  # 2x2 cross pairs
-    assert len(data["roc_curve"]) == 25
-    assert 0.0 <= data["eer"] <= 1.0
-    assert data["decision"]["stage"] == "threshold"
-    assert data["decision"]["status"] == "completed"
-
-    # Verify audit record
-    db = SessionMaker()
-    audit_entry = db.query(AuditLog).filter(AuditLog.event == "EVALUATION_THRESHOLD_COMPLETED").first()
-    assert audit_entry is not None
-    assert audit_entry.event == "EVALUATION_THRESHOLD_COMPLETED"
-    db.close()
+# FR-3 threshold tests moved to tests/test_threshold_api.py: the endpoint now
+# requires an authenticated admin/analyst session + CSRF, which this minimal
+# router-only app (no auth routes) cannot provide.
 
 
 def test_subgroup_bias_audit_success(test_setup):

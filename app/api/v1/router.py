@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter
 
-from app.api.v1 import audit, auth, dataset, evaluations, health, policy, reports, users
+from app.api.v1 import audit, auth, dataset, evaluations, health, policy, reports, thresholds, users
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(health.router)
@@ -13,3 +13,4 @@ api_router.include_router(dataset.router)
 api_router.include_router(evaluations.router)
 api_router.include_router(policy.router)
 api_router.include_router(reports.router)
+api_router.include_router(thresholds.router)
