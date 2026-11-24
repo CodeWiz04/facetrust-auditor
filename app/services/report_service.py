@@ -116,7 +116,10 @@ def build_json_report(
         "audit_trail_tail": audit_out,
     }
 
-    report_hash = sha256_hex(canonical_json(report))
+    # Exclude volatile fields (generated_at, report_integrity_hash) so the hash is
+    # deterministic across back-to-back calls on identical data.
+    hashable = {k: v for k, v in report.items() if k not in ("generated_at", "report_integrity_hash")}
+    report_hash = sha256_hex(canonical_json(hashable))
     report["report_integrity_hash"] = report_hash
     return report
 
