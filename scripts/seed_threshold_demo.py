@@ -4,13 +4,6 @@ No real faces are involved: each "subject" is a random identity vector and
 each "sample" is that vector plus noise. This is the safe sample data for
 demonstrating threshold tuning (T1/T2) on any laptop, without dlib.
 
-Run from the repository root (uses the same .env / DATABASE_URL as the API):
-
-    python scripts/seed_threshold_demo.py                  # 40 subjects x 5 samples
-    python scripts/seed_threshold_demo.py --noise 0.9      # harder, overlapping scores
-    python scripts/seed_threshold_demo.py --reset          # remove demo subjects only
-
-Then evaluate with model_name "synthetic-demo-128d".
 """
 
 from __future__ import annotations
