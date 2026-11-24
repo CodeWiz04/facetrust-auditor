@@ -22,7 +22,15 @@ from app.schemas.evaluation import (
     ThresholdEvalResponse,
 )
 
+from app.schemas.policy import (
+    ChangeRecord,
+    PolicyResponse,
+    PolicyUpdateRequest,
+    PolicyUpdateResponse,
+)
+
 __all__ = [
+    "ChangeRecord",
     "ConsentWithdrawRequest",
     "DeletionReceipt",
     "EmbeddingMetadataResponse",
@@ -31,6 +39,9 @@ __all__ = [
     "ImageListResponse",
     "ImageUploadResponse",
     "LivenessCheckResponse",
+    "PolicyResponse",
+    "PolicyUpdateRequest",
+    "PolicyUpdateResponse",
     "RocPoint",
     "SubgroupBiasRequest",
     "SubgroupBiasResponse",

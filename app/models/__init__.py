@@ -12,6 +12,7 @@ from app.models.evaluation import (
     EvaluationRun,
     EvaluationType,
 )
+from app.models.policy import SystemPolicy
 from app.models.session import UserSession
 from app.models.user import User, UserRole
 
@@ -24,6 +25,7 @@ __all__ = [
     "EvaluationType",
     "Subject",
     "SubjectImage",
+    "SystemPolicy",
     "User",
     "UserRole",
     "UserSession",
