@@ -573,7 +573,19 @@
 
         <!-- ================= VIEW 9: AUDIT CHAIN ================= -->
         <section id="view-audit" class="view-section">
-       
+          <div class="section-header">
+            <div>
+              <h1 class="section-title"><span data-icon="link"></span> Tamper-Evident Audit Hash Chain</h1>
+              <p class="section-subtitle">
+                Append-only cryptographic chain linking each event hash: <code>entry_hash = sha256(seq | event | prev_hash | payload | time)</code>.
+              </p>
+            </div>
+            <div class="section-actions">
+              <button class="btn btn-primary btn-sm" onclick="window.app.verifyChainManually()">
+                <span data-icon="shield"></span> Verify Chain Integrity
+              </button>
+            </div>
+          </div>
 
           <div class="card">
             <div class="card-header">
