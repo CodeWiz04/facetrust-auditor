@@ -53,3 +53,12 @@ def check_liveness(
     # The service still owns the authoritative validation and rejection audit.
     max_bytes = int(policy_service.get_active_config(db)["limits"]["max_image_bytes"])
     file_bytes = file.file.read(max_bytes + 1)
+
+    return liveness_service.evaluate_liveness(
+        db=db,
+        file_bytes=file_bytes,
+        claimed_name=file.filename,
+        actor_id=user.id,
+        actor_role=user.role,
+        ip=client_ip(request),
+    )
