@@ -128,12 +128,23 @@ class ThresholdEvalResponse(BaseModel):
 class SubgroupBiasRequest(BaseModel):
     """Parameters for running demographic subgroup bias evaluation (FR-4, T5)."""
 
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
+
     model_name: str = Field(
         default="dlib-resnet-128d",
+        pattern=MODEL_NAME_PATTERN,
         description="Biometric model to audit for bias",
+    )
+    model_version: str | None = Field(
+        default=None,
+        pattern=MODEL_VERSION_PATTERN,
+        description="Required only when embeddings from several versions exist",
     )
     operating_threshold: float | None = Field(
         default=None,
+        ge=0.0,
+        le=1.0,
+        allow_inf_nan=False,
         description="Threshold at which to compute demographic error rates (defaults to policy)",
     )
 
@@ -141,12 +152,31 @@ class SubgroupBiasRequest(BaseModel):
 class SubgroupMetricItem(BaseModel):
     """Performance metrics for a specific demographic subgroup."""
 
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
+
     group: str
-    sample_count: int
-    genuine_pairs: int
-    impostor_pairs: int
-    far: float
-    frr: float
+    sample_count: int | None = None
+    subjects: int | None = None
+    embeddings: int | None = None
+    status: str = "ok"
+    eligible: bool = True
+    genuine_pairs: int = 0
+    impostor_pairs: int = 0
+    cross_pairs: int = 0
+    impostor_sampled: bool = False
+    cross_sampled: bool = False
+    far: float | None = None
+    frr: float | None = None
+    far_ci95: list[float] | None = None
+    frr_ci95: list[float] | None = None
+    false_accepts: int | None = None
+    false_rejects: int | None = None
+    far_cross: float | None = None
+    far_cross_ci95: list[float] | None = None
+    group_threshold_for_target: float | None = None
+    d_prime: float | None = None
+    genuine_summary: dict[str, Any] = Field(default_factory=dict)
+    impostor_summary: dict[str, Any] = Field(default_factory=dict)
     warning: str | None = None
 
 
@@ -155,16 +185,38 @@ class SubgroupBiasResponse(BaseModel):
 
     run_id: str
     model_name: str
+    model_version: str | None = None
+    config_hash: str | None = None
+    policy_version: int | None = None
     operating_threshold: float
+    threshold_source: str | None = None
+    target_far: float | None = None
+    min_group_n: int | None = None
+
+    status: Literal["completed", "rejected", "flagged"] = "completed"
+    severity: str = "info"
+    confidence: float | None = None
+    rules_fired: list[str] = Field(default_factory=list)
+    rules: list[dict[str, Any]] | list[FiredRuleOut] = Field(default_factory=list)
+    reasons: list[str] = Field(default_factory=list)
+    recommended_action: str = ""
+
     subgroups: list[SubgroupMetricItem]
     max_far_gap: float
     max_frr_gap: float
     disparity_ratio: float | None = None
+    far_disparity_ratio: float | None = None
+    frr_comparison: dict[str, Any] | None = None
+    far_comparison: dict[str, Any] | None = None
+    eligible_groups: list[str] = Field(default_factory=list)
+    suppressed_groups: int = 0
+    engine_version: str | None = None
+
     summary: str
     decision: dict[str, Any] | None = None
     created_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
 
 
 class LivenessCheckResponse(BaseModel):
