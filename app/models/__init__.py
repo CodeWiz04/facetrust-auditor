@@ -7,6 +7,12 @@ from app.models.dataset import (
     Subject,
     SubjectImage,
 )
+from app.models.evaluation import (
+    EvaluationResult,
+    EvaluationRun,
+    EvaluationType,
+)
+from app.models.policy import PolicyVersion, SystemPolicy
 from app.models.session import UserSession
 from app.models.user import User, UserRole
 
@@ -14,8 +20,13 @@ __all__ = [
     "AuditLog",
     "BiometricEmbedding",
     "ConsentStatus",
+    "EvaluationResult",
+    "EvaluationRun",
+    "EvaluationType",
+    "PolicyVersion",
     "Subject",
     "SubjectImage",
+    "SystemPolicy",
     "User",
     "UserRole",
     "UserSession",

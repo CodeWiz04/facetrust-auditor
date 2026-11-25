@@ -1,19 +1,32 @@
-"""Services package."""
+"""Database ORM models package."""
 
-from app.services.dataset_service import (
-    create_subject,
-    get_decrypted_image,
-    get_subject,
-    ingest_subject_image,
-    list_subjects,
-    withdraw_consent,
+from app.models.audit import AuditLog
+from app.models.dataset import (
+    BiometricEmbedding,
+    ConsentStatus,
+    Subject,
+    SubjectImage,
 )
+from app.models.evaluation import (
+    EvaluationResult,
+    EvaluationRun,
+    EvaluationType,
+)
+from app.models.policy import PolicyVersion
+from app.models.session import UserSession
+from app.models.user import User, UserRole
 
 __all__ = [
-    "create_subject",
-    "get_decrypted_image",
-    "get_subject",
-    "ingest_subject_image",
-    "list_subjects",
-    "withdraw_consent",
+    "AuditLog",
+    "BiometricEmbedding",
+    "ConsentStatus",
+    "EvaluationResult",
+    "EvaluationRun",
+    "EvaluationType",
+    "PolicyVersion",
+    "Subject",
+    "SubjectImage",
+    "User",
+    "UserRole",
+    "UserSession",
 ]

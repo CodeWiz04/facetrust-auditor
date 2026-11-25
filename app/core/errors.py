@@ -46,6 +46,26 @@ ERROR_CATALOG: dict[str, tuple[int, str]] = {
     # Crypto / storage
     "FILE-CORRUPT": (422, "The file could not be read."),
     "DEL-VERIFY-FAILED": (409, "Verification failed."),
+    # Evaluation
+    "EVAL-INSUFFICIENT-DATA": (400, "Insufficient biometric data to perform evaluation."),
+    "EVAL-DATA-INTEGRITY": (500, "Stored biometric data failed an integrity check."),
+    "EVAL-MODEL-VERSION-AMBIGUOUS": (
+        409,
+        "Embeddings from several model versions exist; specify model_version.",
+    ),
+    "EVAL-RUN-TYPE-MISMATCH": (409, "That evaluation run is not a threshold tuning run."),
+    # Threshold policy (FR-3)
+    "CFG-CONFIRMATION-REQUIRED": (400, "This action requires explicit confirmation."),
+    "CFG-VERSION-CONFLICT": (
+        409,
+        "The policy was changed by someone else. Reload it and try again.",
+    ),
+    "CFG-INTEGRITY": (500, "The stored policy failed its integrity check."),
+    "THR-APPLY-BLOCKED": (409, "This threshold recommendation cannot be applied."),
+    "THR-LOW-CONFIDENCE-UNACKNOWLEDGED": (
+        409,
+        "The recommendation is low-confidence; acknowledge this explicitly to apply it.",
+    ),
 }
 
 

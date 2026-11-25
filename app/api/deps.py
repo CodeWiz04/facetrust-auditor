@@ -32,7 +32,7 @@ def get_current_session(
             token = auth_header.split(" ", 1)[1]
 
     if not token:
-        raise AppError("AUTH-SESSION-INVALID", "Missing session token", status_code=401)
+        raise AppError("AUTH-SESSION-INVALID", detail="Missing session token")
 
     thash = hash_token(token)
     session = db.scalar(
@@ -42,7 +42,7 @@ def get_current_session(
         )
     )
     if not session or session.expires_at <= utcnow():
-        raise AppError("AUTH-SESSION-INVALID", "Session is expired or revoked", status_code=401)
+        raise AppError("AUTH-SESSION-INVALID", detail="Session is expired or revoked")
 
     # Update last seen timestamp
     session.last_seen_at = utcnow()
@@ -57,7 +57,7 @@ def get_current_user(
     """Return user owning the active session."""
     user = session.user
     if not user or not user.is_active:
-        raise AppError("AUTH-ACCOUNT-DISABLED", "Account is disabled", status_code=403)
+        raise AppError("AUTH-ACCOUNT-DISABLED", detail="Account is disabled")
     return user
 
 
@@ -66,11 +66,7 @@ def require_roles(*allowed_roles: str) -> Callable[..., User]:
 
     def _role_checker(user: User = Depends(get_current_user)) -> User:
         if user.role not in allowed_roles:
-            raise AppError(
-                "AUTH-FORBIDDEN",
-                f"Role '{user.role}' not permitted for this action",
-                status_code=403,
-            )
+            raise AppError("AUTH-FORBIDDEN", detail=f"Role '{user.role}' not permitted for this action")
         return user
 
     return _role_checker
@@ -87,7 +83,40 @@ def require_csrf(
         return
 
     if not x_csrf_token:
-        raise AppError("AUTH-CSRF-INVALID", "Missing CSRF token header", status_code=403)
+        raise AppError("AUTH-CSRF-INVALID", detail="Missing CSRF token header")
 
     if not tokens_equal(hash_token(x_csrf_token), session.csrf_hash):
-        raise AppError("AUTH-CSRF-INVALID", "Invalid CSRF token", status_code=403)
+        raise AppError("AUTH-CSRF-INVALID", detail="Invalid CSRF token")
+
+
+def require_roles_audited(action: str, *allowed_roles: str) -> Callable[..., User]:
+    """Like `require_roles`, but a denied attempt is written to the audit log.
+
+    The caller still receives the generic AUTH-FORBIDDEN response; the audit
+    entry records who tried what, without exposing the protected record.
+    """
+
+    def _role_checker(
+        request: Request,
+        user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> User:
+        if user.role not in allowed_roles:
+            from app.core import audit  # local import avoids a cycle
+            from app.core.rate_limit import client_ip
+
+            audit.record(
+                db,
+                event="ACCESS_DENIED",
+                actor_id=user.id,
+                actor_role=user.role,
+                ip=client_ip(request),
+                payload={"action": action, "method": request.method},
+            )
+            raise AppError(
+                "AUTH-FORBIDDEN",
+                detail=f"role={user.role} action={action}",
+            )
+        return user
+
+    return _role_checker
