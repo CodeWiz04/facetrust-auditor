@@ -551,7 +551,24 @@
 
         <!-- ================= VIEW 8: EVALUATION SUITE (T1-T6) ================= -->
         <section id="view-evaluation" class="view-section">
-      
+          <div class="section-header">
+            <div>
+              <h1 class="section-title"><span data-icon="checkCircle"></span> Mandatory Evaluation Test Suite</h1>
+              <p class="section-subtitle">
+                Automated execution of test cases T1 through T6 and T-final as mandated by Page 3 of the project specification.
+              </p>
+            </div>
+            <div class="section-actions">
+              <button class="btn btn-secondary btn-sm" onclick="window.app.exportCsv()">
+                <span data-icon="download"></span> Export CSV Results
+              </button>
+              <button class="btn btn-primary btn-sm" onclick="window.app.runAllEvaluations()">
+                <span data-icon="refreshCw"></span> Re-Run All Tests
+              </button>
+            </div>
+          </div>
+
+          <div id="evaluation-results-list"></div>
         </section>
 
         <!-- ================= VIEW 9: AUDIT CHAIN ================= -->
