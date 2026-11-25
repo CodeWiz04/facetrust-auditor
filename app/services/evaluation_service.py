@@ -2,7 +2,7 @@
 
 Implements:
 - FR-3: delegated to app/services/threshold_service.py (engine/threshold.py).
-- FR-4: Demographic subgroup disparity analysis and sample size auditing.
+- FR-4: delegated to app/services/subgroup_service.py (engine/subgroup.py).
 - FR-5: Presentation-attack liveness cue orchestration.
 """
 
@@ -19,10 +19,8 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from app.core import audit
-from app.core.crypto import decrypt_embedding
 from app.core.errors import AppError
 from app.core.time import utcnow
-from app.models.dataset import BiometricEmbedding, ConsentStatus, Subject
 from app.models.evaluation import EvaluationResult, EvaluationRun, EvaluationType
 from app.services import policy_service
 from app.schemas.evaluation import (
@@ -31,13 +29,11 @@ from app.schemas.evaluation import (
     LivenessCheckResponse,
     SubgroupBiasRequest,
     SubgroupBiasResponse,
-    SubgroupMetricItem,
     ThresholdEvalRequest,
     ThresholdEvalResponse,
 )
 from engine.dataset_validator import ValidatedImage, validate_image
 from engine.decision import Decision, Timer
-from engine.embeddings import cosine_score
 from engine.hashing import canonical_json, config_hash
 from engine.liveness import analyze_liveness_cues
 
@@ -68,237 +64,15 @@ def run_subgroup_bias_audit(
     actor_role: str | None = None,
     ip: str | None = None,
 ) -> SubgroupBiasResponse:
-    """Execute demographic subgroup bias auditing and disparity analysis (FR-4, T5)."""
-    timer = Timer()
-    config = policy_service.get_active_config(db)
-    cfg_hash = config_hash(config)
-    min_group_n = int(config.get("min_group_n", 30))
-    operating_th = (
-        request.operating_threshold
-        if request.operating_threshold is not None
-        else float(config.get("match_threshold", 0.5))
-    )
+    """FR-4 subgroup metrics.
 
-    # 1. Query active consented subjects
-    subjects = list(
-        db.scalars(
-            select(Subject).where(Subject.consent_status == ConsentStatus.GRANTED.value)
-        ).all()
-    )
-    if not subjects:
-        raise AppError(
-            "EVAL-INSUFFICIENT-DATA",
-            detail="No subjects with granted consent exist for bias auditing.",
-        )
+    Kept for backward compatibility; the implementation lives in
+    `app/services/subgroup_service.py` and the maths in `engine/subgroup.py`.
+    """
+    from app.services import subgroup_service
 
-    # Group subjects by demographic group label
-    subjects_by_group: dict[str, list[Subject]] = {}
-    for sub in subjects:
-        group_key = sub.group.strip() if sub.group else "undisclosed"
-        subjects_by_group.setdefault(group_key, []).append(sub)
-
-    # Decrypt embeddings by subject
-    embeddings_by_sub: dict[str, list[list[float]]] = {}
-    model_version = "1.0.0"
-
-    for sub in subjects:
-        sub_embs = list(
-            db.scalars(
-                select(BiometricEmbedding).where(
-                    BiometricEmbedding.subject_id == sub.id,
-                    BiometricEmbedding.model_name == request.model_name,
-                )
-            ).all()
-        )
-        if sub_embs:
-            model_version = sub_embs[0].model_version
-            vectors = [decrypt_embedding(e.encrypted_embedding) for e in sub_embs]
-            if vectors:
-                embeddings_by_sub[sub.id] = vectors
-
-    if not embeddings_by_sub:
-        raise AppError(
-            "EVAL-INSUFFICIENT-DATA",
-            detail=f"No enrolled embeddings found for model '{request.model_name}'.",
-        )
-
-    # 2. Compute metrics per subgroup
-    subgroup_metrics: list[SubgroupMetricItem] = []
-
-    for group_name, group_subs in subjects_by_group.items():
-        sample_count = len(group_subs)
-        warning_msg = None
-        if sample_count < min_group_n:
-            warning_msg = (
-                f"Sample size N={sample_count} < {min_group_n} provides low statistical "
-                "confidence (wide 95% confidence interval)."
-            )
-
-        # Genuine pairs within this group
-        group_genuine_scores: list[float] = []
-        for s in group_subs:
-            vecs = embeddings_by_sub.get(s.id, [])
-            n_vecs = len(vecs)
-            if n_vecs >= 2:
-                for i in range(n_vecs):
-                    for j in range(i + 1, n_vecs):
-                        group_genuine_scores.append(cosine_score(vecs[i], vecs[j]))
-
-        # Impostor pairs involving subjects in this group
-        group_impostor_scores: list[float] = []
-        for s in group_subs:
-            vecs_s = embeddings_by_sub.get(s.id, [])
-            for other_sub_id, other_vecs in embeddings_by_sub.items():
-                if other_sub_id != s.id:
-                    for vs in vecs_s:
-                        for vo in other_vecs:
-                            group_impostor_scores.append(cosine_score(vs, vo))
-                            if len(group_impostor_scores) >= 10000:
-                                break
-                        if len(group_impostor_scores) >= 10000:
-                            break
-                if len(group_impostor_scores) >= 10000:
-                    break
-
-        n_gen = len(group_genuine_scores)
-        n_imp = len(group_impostor_scores)
-
-        if n_gen > 0:
-            gen_matches = sum(1 for sc in group_genuine_scores if sc >= operating_th)
-            frr = round(float((n_gen - gen_matches) / n_gen), 6)
-        else:
-            frr = 0.0
-
-        if n_imp > 0:
-            imp_matches = sum(1 for sc in group_impostor_scores if sc >= operating_th)
-            far = round(float(imp_matches / n_imp), 6)
-        else:
-            far = 0.0
-
-        subgroup_metrics.append(
-            SubgroupMetricItem(
-                group=group_name,
-                sample_count=sample_count,
-                genuine_pairs=n_gen,
-                impostor_pairs=n_imp,
-                far=far,
-                frr=frr,
-                warning=warning_msg,
-            )
-        )
-
-    # 3. Disparity calculations
-    fars = [m.far for m in subgroup_metrics]
-    frrs = [m.frr for m in subgroup_metrics]
-
-    max_far_gap = round(float(max(fars) - min(fars)), 6) if fars else 0.0
-    max_frr_gap = round(float(max(frrs) - min(frrs)), 6) if frrs else 0.0
-
-    valid_frrs = [m.frr for m in subgroup_metrics if m.frr > 0]
-    disparity_ratio = (
-        round(float(max(frrs) / min(valid_frrs)), 3)
-        if valid_frrs and len(valid_frrs) > 0 and min(valid_frrs) > 0
-        else None
-    )
-
-    is_disparity_high = max_frr_gap > 0.05 or max_far_gap > 0.02
-    summary = (
-        f"Audited {len(subgroup_metrics)} demographic subgroups at operating threshold {operating_th:.4f}. "
-        f"Maximum FRR gap: {max_frr_gap * 100:.2f}%, Maximum FAR gap: {max_far_gap * 100:.2f}%."
-    )
-    if is_disparity_high:
-        summary += " Noticeable demographic disparity detected between subgroups."
-    else:
-        summary += " Demographic performance is relatively balanced across evaluated groups."
-
-    # 4. Explainable Decision
-    rules_fired = ("BIAS-DISPARITY-FLAG",) if is_disparity_high else ()
-    status = "flagged" if is_disparity_high else "completed"
-    severity = "medium" if is_disparity_high else "info"
-
-    decision = Decision.create(
-        stage="subgroup",
-        status=status,
-        outcome="SUBGROUP_BIAS_AUDIT_COMPLETED",
-        score=max_frr_gap,
-        threshold=operating_th,
-        severity=severity,
-        confidence=1.0,
-        rules_fired=rules_fired,
-        reasons=(
-            f"Evaluated {len(subgroup_metrics)} demographic subgroups.",
-            f"Max FRR gap between groups is {max_frr_gap * 100:.2f}%.",
-            f"Max FAR gap between groups is {max_far_gap * 100:.2f}%.",
-            summary,
-        ),
-        config_hash=cfg_hash,
-        input_ref=f"eval:bias:{request.model_name}",
-        latency_ms=timer.ms(),
-        model=request.model_name,
-        model_version=model_version,
-    )
-
-    # 5. Persist run and results
-    run = EvaluationRun(
-        run_type=EvaluationType.BIAS_AUDIT.value,
-        model_name=request.model_name,
-        model_version=model_version,
-        config_hash=cfg_hash,
-        operating_threshold=operating_th,
-        summary_metrics_json=canonical_json({
-            "operating_threshold": operating_th,
-            "max_far_gap": max_far_gap,
-            "max_frr_gap": max_frr_gap,
-            "disparity_ratio": disparity_ratio,
-            "subgroups_count": len(subgroup_metrics),
-        }),
-        created_by=actor_id,
-        created_at=utcnow(),
-    )
-    db.add(run)
-    db.flush()
-
-    for item in subgroup_metrics:
-        db.add(
-            EvaluationResult(
-                run_id=run.id,
-                category="subgroup",
-                item_key=item.group,
-                metrics_json=canonical_json(item.model_dump()),
-                decision_json=canonical_json(decision.to_dict()),
-                created_at=utcnow(),
-            )
-        )
-
-    # 6. Append-only tamper-evident audit log
-    audit.record(
-        db,
-        event="EVALUATION_BIAS_COMPLETED",
-        actor_id=actor_id,
-        actor_role=actor_role,
-        ip=ip,
-        payload={
-            "run_id": run.id,
-            "model_name": request.model_name,
-            "operating_threshold": operating_th,
-            "max_far_gap": max_far_gap,
-            "max_frr_gap": max_frr_gap,
-            "disparity_ratio": disparity_ratio,
-            "subgroups_evaluated": len(subgroup_metrics),
-        },
-    )
-
-    return SubgroupBiasResponse(
-        run_id=run.id,
-        model_name=request.model_name,
-        operating_threshold=operating_th,
-        subgroups=subgroup_metrics,
-        max_far_gap=max_far_gap,
-        max_frr_gap=max_frr_gap,
-        disparity_ratio=disparity_ratio,
-        summary=summary,
-        decision=decision.to_dict(),
-        created_at=run.created_at,
+    return subgroup_service.run_subgroup_audit(
+        db, request, actor_id=actor_id, actor_role=actor_role, ip=ip
     )
 
 

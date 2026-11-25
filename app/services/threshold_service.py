@@ -44,7 +44,12 @@ THRESHOLD_PURPOSES = ("evaluation", "threshold_tuning")
 # ---------------------------------------------------------------------------
 # Loading consented data
 # ---------------------------------------------------------------------------
-def _resolve_model_version(db: Session, model_name: str, requested: str | None) -> str:
+def _resolve_model_version(
+    db: Session,
+    model_name: str,
+    requested: str | None,
+    purposes: tuple[str, ...] = THRESHOLD_PURPOSES,
+) -> str:
     versions = sorted(
         set(
             db.scalars(
@@ -53,7 +58,7 @@ def _resolve_model_version(db: Session, model_name: str, requested: str | None) 
                 .where(
                     BiometricEmbedding.model_name == model_name,
                     Subject.consent_status == ConsentStatus.GRANTED.value,
-                    Subject.purpose.in_(THRESHOLD_PURPOSES),
+                    Subject.purpose.in_(purposes),
                 )
             ).all()
         )
@@ -77,7 +82,10 @@ def _resolve_model_version(db: Session, model_name: str, requested: str | None) 
 
 
 def _load_embeddings(
-    db: Session, model_name: str, model_version: str
+    db: Session,
+    model_name: str,
+    model_version: str,
+    purposes: tuple[str, ...] = THRESHOLD_PURPOSES,
 ) -> dict[str, list[list[float]]]:
     rows = db.execute(
         select(BiometricEmbedding.id, BiometricEmbedding.subject_id,
@@ -87,7 +95,7 @@ def _load_embeddings(
             BiometricEmbedding.model_name == model_name,
             BiometricEmbedding.model_version == model_version,
             Subject.consent_status == ConsentStatus.GRANTED.value,
-            Subject.purpose.in_(THRESHOLD_PURPOSES),
+            Subject.purpose.in_(purposes),
         )
         .order_by(BiometricEmbedding.subject_id, BiometricEmbedding.id)
         .limit(MAX_EMBEDDINGS + 1)
@@ -487,3 +495,9 @@ def apply_run_recommendation(
         expected_version=expected_version,
         source_run_id=run.id,
     )
+
+
+# Public names for other modules (FR-4 subgroup audit reuses the same
+# consent-checked, decrypt-in-memory loading path).
+resolve_model_version = _resolve_model_version
+load_consented_embeddings = _load_embeddings

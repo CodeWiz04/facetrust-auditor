@@ -1,9 +1,20 @@
-"""Seed SYNTHETIC consented subjects + encrypted embeddings for the FR-3 demo.
+"""Seed SYNTHETIC consented subjects + encrypted embeddings for the FR-3 / FR-4 demo.
 
 No real faces are involved: each "subject" is a random identity vector and
 each "sample" is that vector plus noise. This is the safe sample data for
 demonstrating threshold tuning (T1/T2) on any laptop, without dlib.
 
+Run from the repository root (uses the same .env / DATABASE_URL as the API):
+
+    python scripts/seed_threshold_demo.py                  # 96 subjects (32 per group) x 5 samples
+    python scripts/seed_threshold_demo.py --noise 0.9      # harder, overlapping scores
+    python scripts/seed_threshold_demo.py --reset          # remove demo subjects only
+    python scripts/seed_threshold_demo.py --bias           # FR-4: group_c gets noisier images
+
+Subjects are spread over group_a / group_b / group_c with consent purpose
+"evaluation", which covers both threshold tuning (FR-3) and bias audit (FR-4).
+
+Then evaluate with model_name "synthetic-demo-128d".
 """
 
 from __future__ import annotations
@@ -37,13 +48,16 @@ GROUPS = ("group_a", "group_b", "group_c")
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    p.add_argument("--subjects", type=int, default=40)
+    p.add_argument("--subjects", type=int, default=96,
+                   help="96 = 32 per group, above the default min_group_n of 30")
     p.add_argument("--per-subject", type=int, default=5)
     p.add_argument("--dim", type=int, default=128)
     p.add_argument("--noise", type=float, default=0.45,
                    help="per-sample noise (0.2 = easy, 0.9 = hard)")
     p.add_argument("--seed", type=int, default=2026)
     p.add_argument("--reset", action="store_true", help="delete existing demo subjects and exit")
+    p.add_argument("--bias", action="store_true",
+                   help="FR-4 demo: give group_c 3x the noise (simulates poor lighting)")
     args = p.parse_args()
 
     if not (2 <= args.subjects <= 500 and 1 <= args.per_subject <= 20
@@ -72,12 +86,13 @@ def main() -> int:
                 subject_code=code,
                 consent_status=ConsentStatus.GRANTED.value,
                 consent_date="2026-11-01",
-                purpose="threshold_tuning",
+                purpose="evaluation",
                 group=GROUPS[s % len(GROUPS)],
             )
             db.add(sub)
             db.flush()
             identity = rng.normal(size=args.dim)
+            noise = args.noise * (3.0 if args.bias and sub.group == "group_c" else 1.0)
             for k in range(args.per_subject):
                 img = SubjectImage(
                     subject_id=sub.id,
@@ -91,7 +106,7 @@ def main() -> int:
                 )
                 db.add(img)
                 db.flush()
-                vector = identity + rng.normal(scale=args.noise, size=args.dim)
+                vector = identity + rng.normal(scale=noise, size=args.dim)
                 db.add(BiometricEmbedding(
                     image_id=img.id,
                     subject_id=sub.id,
@@ -104,7 +119,9 @@ def main() -> int:
 
     n = args.subjects * args.per_subject
     print(f"seeded {args.subjects} synthetic subjects / {n} encrypted embeddings")
-    print(f"model_name = {MODEL_NAME!r}  (use this in POST /api/v1/threshold/evaluate)")
+    print(f"model_name = {MODEL_NAME!r}  (use in /threshold/evaluate and /subgroups/audit)")
+    if args.bias:
+        print("group_c was seeded with 3x noise -> expect BIAS-FRR-DISPARITY in FR-4")
     return 0
 
 
