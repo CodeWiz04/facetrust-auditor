@@ -354,7 +354,8 @@ def test_bias_audit_uses_active_threshold(admin: ApiHelper):
     seed_subjects()
     admin.client.patch(POLICY, json={"match_threshold": 0.66, "reason": "new threshold",
                                      "confirm": True}, headers=admin.csrf_headers())
-    r = admin.client.post("/api/v1/evaluations/bias", json={"model_name": MODEL})
+    r = admin.client.post("/api/v1/evaluations/bias", json={"model_name": MODEL},
+                          headers=admin.csrf_headers())
     assert r.status_code == 200, r.text
     assert r.json()["operating_threshold"] == 0.66
 
