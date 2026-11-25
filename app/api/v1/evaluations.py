@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_csrf, require_roles_audited
-from app.api.v1 import thresholds
+from app.api.v1 import subgroups, thresholds
 from app.core.config import get_settings
 from app.core.errors import AppError
 from app.core.rate_limit import client_ip
@@ -40,10 +40,10 @@ router = APIRouter(prefix="/evaluations", tags=["evaluations"])
 
 
 def _resolve_actor(request: Request, db: Session) -> tuple[str, str]:
-    """Best-effort caller identity for audit entries of FR-4 / FR-5 endpoints.
+    """Best-effort caller identity for audit entries of the FR-5 endpoint.
 
     (The previous version called a non-existent `Session.select`, so it
-    never found the session.) FR-3 endpoints do not use this: they require
+    never found the session.) FR-3 / FR-4 endpoints do not use this: they require
     an authenticated, authorized user via dependencies.
     """
     settings = get_settings()
@@ -97,18 +97,17 @@ def evaluate_threshold(
 def evaluate_bias(
     payload: SubgroupBiasRequest,
     request: Request,
+    user: User = Depends(require_roles_audited(
+        "subgroup.audit", UserRole.ADMIN.value, UserRole.ANALYST.value
+    )),
+    _csrf: None = Depends(require_csrf),
     db: Session = Depends(get_db),
 ) -> SubgroupBiasResponse:
-    """Audit biometric accuracy across demographic subgroups and compute disparity metrics."""
-    actor_id, actor_role = _resolve_actor(request, db)
-    ip = client_ip(request)
-    return evaluation_service.run_subgroup_bias_audit(
-        db=db,
-        request=payload,
-        actor_id=actor_id,
-        actor_role=actor_role,
-        ip=ip,
-    )
+    """Same as POST /api/v1/subgroups/audit (kept for existing clients).
+
+    Requires an authenticated admin/analyst session and the X-CSRF-Token header.
+    """
+    return subgroups.run_audit(payload, request, user, db)
 
 
 @router.post(
