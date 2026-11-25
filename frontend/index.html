@@ -340,7 +340,24 @@
             </div>
           </div>
 
-   
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><span data-icon="crosshair"></span> Biometric Comparison & Explainable Decision</div>
+              <span class="card-tag">FR-2 / FR-3</span>
+            </div>
+            <div class="grid-2" style="margin-bottom: 14px;">
+              <div class="stat-card">
+                <div class="stat-label">Cosine Similarity Score (S)</div>
+                <div class="stat-value" id="embed-cosine-score" style="color: var(--accent-amber);">0.9842</div>
+                <div class="stat-meta">Allowed range: [-1.0, 1.0] (1.0 = identical)</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">Euclidean Distance (D)</div>
+                <div class="stat-value" id="embed-euclid-dist" style="color: var(--accent-cyan);">0.1779</div>
+                <div class="stat-meta">L2 vector separation metric</div>
+              </div>
+            </div>
+
             <div id="embed-decision-box" class="explain-box success"></div>
           </div>
         </section>
