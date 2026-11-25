@@ -1,4 +1,7 @@
-"""Integration tests for threshold tuning, subgroup bias auditing, and liveness endpoints."""
+"""Integration tests for the liveness endpoint and evaluation run history (FR-5).
+
+FR-3 tests: tests/test_threshold_api.py. FR-4 tests: tests/test_subgroup_api.py.
+"""
 
 from __future__ import annotations
 
@@ -131,50 +134,8 @@ def _enroll_sample_subject(
 # router-only app (no auth routes) cannot provide.
 
 
-def test_subgroup_bias_audit_success(test_setup):
-    client, SessionMaker = test_setup
-    db = SessionMaker()
-
-    np.random.seed(123)
-    # Group A: 2 subjects
-    s1_a = np.random.randn(128).tolist()
-    s1_b = (np.array(s1_a) + 0.05).tolist()
-    s2_a = np.random.randn(128).tolist()
-    s2_b = (np.array(s2_a) + 0.05).tolist()
-
-    # Group B: 1 subject
-    s3_a = np.random.randn(128).tolist()
-    s3_b = (np.array(s3_a) + 0.05).tolist()
-
-    _enroll_sample_subject(db, "SUB-GA-1", "male_20s", [s1_a, s1_b])
-    _enroll_sample_subject(db, "SUB-GA-2", "male_20s", [s2_a, s2_b])
-    _enroll_sample_subject(db, "SUB-GB-1", "female_20s", [s3_a, s3_b])
-    db.close()
-
-    res = client.post(
-        "/api/v1/evaluations/bias",
-        json={"model_name": "dlib-resnet-128d", "operating_threshold": 0.5},
-    )
-    assert res.status_code == 200
-    data = res.json()
-
-    assert len(data["subgroups"]) == 2
-    groups = {s["group"] for s in data["subgroups"]}
-    assert "male_20s" in groups
-    assert "female_20s" in groups
-
-    for s in data["subgroups"]:
-        # Verify small sample warning triggers because N < 30
-        assert s["warning"] is not None
-        assert "low statistical confidence" in s["warning"]
-
-    assert data["decision"]["stage"] == "subgroup"
-
-    # Verify audit record
-    db = SessionMaker()
-    audit_entry = db.query(AuditLog).filter(AuditLog.event == "EVALUATION_BIAS_COMPLETED").first()
-    assert audit_entry is not None
-    db.close()
+# FR-4 subgroup tests moved to tests/test_subgroup_api.py for the same reason
+# (the endpoint now requires an authenticated session + CSRF).
 
 
 def test_liveness_endpoint_live_and_attack(test_setup):
