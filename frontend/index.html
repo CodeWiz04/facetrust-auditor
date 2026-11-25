@@ -531,7 +531,23 @@
             </div>
           </div>
 
-       
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Execute Consent Revocation</div>
+              <span class="card-tag">High-Impact Action</span>
+            </div>
+            <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px;">
+              Revoking consent irreversibly destroys the encrypted biometric vector and deletes raw image ciphertext from disk. An immutable tombstone entry is appended to the audit hash chain without leaking personal data.
+            </p>
+            <div class="form-group" style="max-width: 400px;">
+              <label class="form-label">Select Active Consented Subject</label>
+              <select class="form-select" id="deletion-subject-select"></select>
+            </div>
+            <button class="btn btn-danger btn-sm" onclick="window.app.triggerWithdrawConsent(document.getElementById('deletion-subject-select').value)">
+              <span data-icon="trash2"></span> Revoke Consent & Cryptographically Zeroize
+            </button>
+          </div>
+        </section>
 
         <!-- ================= VIEW 8: EVALUATION SUITE (T1-T6) ================= -->
         <section id="view-evaluation" class="view-section">
