@@ -77,3 +77,84 @@ def _to_response(
         latency_ms=decision.latency_ms,
         created_at=decision.created_at,
     )
+
+def evaluate_liveness(
+    db: Session,
+    file_bytes: bytes,
+    actor_id: str,
+    actor_role: str,
+    ip: str | None,
+    claimed_name: str | None = None,
+) -> LivenessCheckResponse:
+    """Run FR-5 on one uploaded image and record tamper-evident evidence."""
+    input_ref = hash_input(file_bytes)
+
+    try:
+        if not file_bytes:
+            raise EngineError("FILE-CORRUPT", f"input_ref={input_ref} empty upload")
+
+        config = policy_service.get_active_config(db)
+        cfg_hash = config_hash(config)
+
+        validated = validate_image(
+            file_bytes,
+            limits=config["limits"],
+            claimed_name=claimed_name,
+        )
+
+        # validate_image returns a clean PNG rebuilt from pixels only.
+        with Image.open(BytesIO(validated.png_bytes)) as img:
+            rgb = np.ascontiguousarray(
+                np.asarray(img.convert("RGB"), dtype=np.uint8)
+            )
+
+        decision, metrics = analyze_liveness_cues(
+            rgb,
+            config=config,
+            input_ref=validated.input_ref,
+            config_hash=cfg_hash,
+        )
+    except EngineError as exc:
+        # Audit the rejection with a stable error code and a content hash.
+        # Never write exc.detail, filename, or file bytes to the audit log.
+        audit.record(
+            db,
+            event="LIVENESS_CHECK_FAILED",
+            actor_id=actor_id,
+            actor_role=actor_role,
+            ip=ip,
+            payload={
+                "input_ref": input_ref,
+                "error_code": exc.code,
+            },
+        )
+        raise
+
+    result, recommended_action = _interpret(decision.status)
+    score = float(decision.score if decision.score is not None else 0.0)
+    is_attack = decision.status in ("flagged", "rejected")
+
+    summary = {
+        "input_ref": validated.input_ref,
+        "clean_ref": validated.clean_ref,
+        "liveness_score": score,
+        "result": result,
+        "outcome": decision.outcome,
+        "is_attack": is_attack,
+        "rules_fired": list(decision.rules_fired),
+        "recommended_action": recommended_action,
+        **metrics,
+    }
+
+    run = EvaluationRun(
+        run_type=EvaluationType.LIVENESS.value,
+        model_name=decision.model,
+        model_version=decision.model_version,
+        config_hash=cfg_hash,
+        operating_threshold=None,
+        summary_metrics_json=canonical_json(summary),
+        created_by=actor_id,
+        created_at=utcnow(),
+    )
+    db.add(run)
+    db.flush()
