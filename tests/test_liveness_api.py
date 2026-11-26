@@ -8,6 +8,7 @@ from __future__ import annotations
 import io
 import json
 
+import pytest
 from fastapi.testclient import TestClient
 from PIL import Image, ImageDraw
 from sqlalchemy import select
@@ -58,6 +59,13 @@ def _audit_events(event: str) -> list[dict]:
             select(AuditLog).where(AuditLog.event == event).order_by(AuditLog.seq)
         ).all()
         return [json.loads(row.payload_json) for row in rows]
+
+
+@pytest.fixture()
+def admin(api: ApiHelper) -> ApiHelper:
+    """Authenticated admin session for FR-5 API tests."""
+    api.register_and_login(ADMIN)
+    return api
 
 
 def test_unauthenticated_check_is_rejected(client: TestClient):
