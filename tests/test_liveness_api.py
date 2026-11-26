@@ -58,3 +58,66 @@ def _audit_events(event: str) -> list[dict]:
             select(AuditLog).where(AuditLog.event == event).order_by(AuditLog.seq)
         ).all()
         return [json.loads(row.payload_json) for row in rows]
+
+def test_unauthenticated_check_is_rejected(client: TestClient):
+    response = _upload(client)
+    assert response.status_code == 401
+    assert response.json()["error_code"] == "AUTH-SESSION-INVALID"
+
+
+def test_missing_csrf_is_rejected(api: ApiHelper):
+    api.register_and_login(ADMIN)
+    response = _upload(api.client)
+    assert response.status_code == 403
+    assert response.json()["error_code"] == "AUTH-CSRF-INVALID"
+
+
+def test_live_and_attack_results_are_explainable_and_audited(admin: ApiHelper):
+    live = _upload(admin.client, headers=admin.csrf_headers())
+    assert live.status_code == 200, live.text
+    live_body = live.json()
+
+    assert live_body["status"] == "completed"
+    assert live_body["result"] == "genuine"
+    assert live_body["score"] >= 0.7
+    assert live_body["reasons"]
+    assert live_body["recommended_action"] == "accept_as_live_candidate"
+    assert live_body["metrics"]["blur_variance"] >= 0
+    assert live_body["input_ref"].startswith("sha256:")
+    assert live_body["clean_ref"].startswith("sha256:")
+
+    attack = _upload(admin.client, attack=True, headers=admin.csrf_headers())
+    assert attack.status_code == 200, attack.text
+    attack_body = attack.json()
+
+    assert attack_body["status"] == "flagged"
+    assert attack_body["result"] == "suspicious"
+    assert "LIV-BLURRY" in attack_body["rules_fired"]
+    assert "LIV-TOO-DARK" in attack_body["rules_fired"]
+    assert attack_body["reasons"]
+    assert attack_body["recommended_action"] == "manual_review_or_retry"
+    assert attack_body["score"] < live_body["score"]
+
+    completed = _audit_events("LIVENESS_CHECK_COMPLETED")
+    assert len(completed) == 2
+    assert completed[-1]["is_attack"] is True
+    assert completed[-1]["outcome"] == "PRESENTATION_ATTACK_DETECTED"
+    assert "filename" not in completed[-1]
+    assert "file_bytes" not in completed[-1]
+
+
+def test_invalid_file_is_rejected_and_audited_without_sensitive_data(admin: ApiHelper):
+    response = admin.client.post(
+        LIVENESS,
+        files={"file": ("secret-name.png", b"not-an-image", "image/png")},
+        headers=admin.csrf_headers(),
+    )
+    assert response.status_code == 400
+    assert response.json()["error_code"] == "FILE-TYPE-INVALID"
+
+    failed = _audit_events("LIVENESS_CHECK_FAILED")
+    assert len(failed) == 1
+    assert failed[0]["error_code"] == "FILE-TYPE-INVALID"
+    assert failed[0]["input_ref"].startswith("sha256:")
+    assert "secret-name" not in json.dumps(failed[0])
+    assert "not-an-image" not in json.dumps(failed[0])
