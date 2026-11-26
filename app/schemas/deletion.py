@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class SubjectDeletionRequest(BaseModel):
     """Irreversible privacy-preserving deletion request."""
+
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
 
     confirm: bool = Field(
         ...,
@@ -61,4 +64,38 @@ class DeletionReceipt(BaseModel):
         )
     )
 
-    model_config = ConfigDict(from_attributes=True)
+    # FR-6 explainability & audit evidence
+    rules_fired: list[str] = Field(default_factory=list)
+    reasons: list[str] = Field(default_factory=list)
+    decision: dict[str, Any] | None = None
+
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
+
+
+class DeletionHistoryItem(BaseModel):
+    """Row in the privacy deletion audit history table."""
+
+    model_config = ConfigDict(protected_namespaces=())
+
+    tombstone_hash: str
+    subject_hash: str
+    images_shredded: int
+    embeddings_destroyed: int
+    status: str
+    deleted_at: datetime
+    actor_role: str | None = None
+
+
+class DeletionHistoryResponse(BaseModel):
+    items: list[DeletionHistoryItem]
+    total: int
+
+
+class DeletionVerifyResponse(BaseModel):
+    """Result of verifying a cryptographic deletion receipt against the audit log."""
+
+    verified: bool
+    tombstone_hash: str
+    subject_hash: str | None = None
+    audit_seq: int | None = None
+    statement: str

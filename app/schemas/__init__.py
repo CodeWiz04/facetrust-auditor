@@ -9,7 +9,13 @@ from app.schemas.dataset import (
     SubjectListResponse,
     SubjectResponse,
 )
-from app.schemas.deletion import DeletionReceipt, SubjectDeletionRequest
+from app.schemas.deletion import (
+    DeletionHistoryItem,
+    DeletionHistoryResponse,
+    DeletionReceipt,
+    DeletionVerifyResponse,
+    SubjectDeletionRequest,
+)
 from app.schemas.evaluation import (
     EvaluationListResponse,
     EvaluationRunSummary,
@@ -32,7 +38,10 @@ from app.schemas.policy import (
 __all__ = [
     "ChangeRecord",
     "ConsentWithdrawRequest",
+    "DeletionHistoryItem",
+    "DeletionHistoryResponse",
     "DeletionReceipt",
+    "DeletionVerifyResponse",
     "EmbeddingMetadataResponse",
     "EvaluationListResponse",
     "EvaluationRunSummary",
