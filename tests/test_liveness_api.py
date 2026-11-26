@@ -59,6 +59,7 @@ def _audit_events(event: str) -> list[dict]:
         ).all()
         return [json.loads(row.payload_json) for row in rows]
 
+
 def test_unauthenticated_check_is_rejected(client: TestClient):
     response = _upload(client)
     assert response.status_code == 401
@@ -121,3 +122,33 @@ def test_invalid_file_is_rejected_and_audited_without_sensitive_data(admin: ApiH
     assert failed[0]["input_ref"].startswith("sha256:")
     assert "secret-name" not in json.dumps(failed[0])
     assert "not-an-image" not in json.dumps(failed[0])
+
+
+def test_auditor_cannot_run_check_and_denial_is_audited(api: ApiHelper):
+    api.register_and_login(ADMIN)
+    created = api.register(AUDITOR).json()
+    changed = api.client.patch(
+        f"/api/v1/users/{created['id']}/role",
+        json={"role": "auditor"},
+        headers=api.csrf_headers(),
+    )
+    assert changed.status_code == 200, changed.text
+
+    with TestClient(app) as auditor_client:
+        auditor = ApiHelper(auditor_client)
+        assert auditor.login(AUDITOR).status_code == 200
+        denied = _upload(auditor.client, headers=auditor.csrf_headers())
+        assert denied.status_code == 403
+        assert denied.json()["error_code"] == "AUTH-FORBIDDEN"
+
+    actions = [event["action"] for event in _audit_events("ACCESS_DENIED")]
+    assert "liveness.check" in actions
+
+
+def test_rate_limit_blocks_excessive_checks(admin: ApiHelper):
+    for _ in range(10):
+        assert _upload(admin.client, headers=admin.csrf_headers()).status_code == 200
+
+    limited = _upload(admin.client, headers=admin.csrf_headers())
+    assert limited.status_code == 429
+    assert limited.json()["error_code"] == "RATE-LIMITED"
