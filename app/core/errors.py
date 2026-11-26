@@ -46,6 +46,9 @@ ERROR_CATALOG: dict[str, tuple[int, str]] = {
     # Crypto / storage
     "FILE-CORRUPT": (422, "The file could not be read."),
     "DEL-VERIFY-FAILED": (409, "Verification failed."),
+    "DEL-CONFIRMATION-REQUIRED": (400, "Deletion requires explicit confirmation."),
+    "DEL-RECEIPT-NOT-FOUND": (404, "Deletion receipt not found."),
+    "DEL-TOMBSTONE-TAMPERED": (409, "Cryptographic tombstone verification failed."),
     # Evaluation
     "EVAL-INSUFFICIENT-DATA": (400, "Insufficient biometric data to perform evaluation."),
     "EVAL-DATA-INTEGRITY": (500, "Stored biometric data failed an integrity check."),
