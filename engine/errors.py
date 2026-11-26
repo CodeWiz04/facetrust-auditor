@@ -46,6 +46,8 @@ ERROR_CATALOG = {
     "CFG-INCONSISTENT": "The settings are inconsistent with each other.",
     # Deletion
     "DEL-VERIFY-FAILED": "Deletion could not be verified.",
+    "DEL-CONFIRMATION-REQUIRED": "Explicit confirmation is required before biometric deletion.",
+    "DEL-NOT-FOUND": "The requested deletion target was not found.",
     # Fallback
     "ENG-INTERNAL": "An internal error occurred.",
 }
