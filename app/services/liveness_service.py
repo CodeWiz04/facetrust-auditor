@@ -78,6 +78,7 @@ def _to_response(
         created_at=decision.created_at,
     )
 
+
 def evaluate_liveness(
     db: Session,
     file_bytes: bytes,
@@ -158,3 +159,48 @@ def evaluate_liveness(
     )
     db.add(run)
     db.flush()
+
+    db.add(
+        EvaluationResult(
+            run_id=run.id,
+            category="liveness_sample",
+            item_key=validated.input_ref,
+            metrics_json=canonical_json(metrics),
+            decision_json=canonical_json(decision.to_dict()),
+            created_at=utcnow(),
+        )
+    )
+
+    audit.record(
+        db,
+        event="LIVENESS_CHECK_COMPLETED",
+        actor_id=actor_id,
+        actor_role=actor_role,
+        ip=ip,
+        payload={
+            "run_id": run.id,
+            "decision_id": decision.decision_id,
+            "input_ref": validated.input_ref,
+            "clean_ref": validated.clean_ref,
+            "config_hash": cfg_hash,
+            "result": result,
+            "outcome": decision.outcome,
+            "severity": decision.severity,
+            "is_attack": is_attack,
+            "liveness_score": score,
+            "rules_fired": list(decision.rules_fired),
+            "width": validated.width,
+            "height": validated.height,
+        },
+    )
+
+    return _to_response(
+        decision=decision,
+        metrics=metrics,
+        input_ref=validated.input_ref,
+        clean_ref=validated.clean_ref,
+        detected_type=validated.detected_type,
+        width=validated.width,
+        height=validated.height,
+        cfg_hash=cfg_hash,
+    )
