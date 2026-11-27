@@ -276,3 +276,26 @@ def test_json_report_integrity_hash_is_deterministic(setup):
     r2 = setup["client"].get("/api/v1/reports/json", headers=headers)
     # Integrity hashes should match if data hasn't changed between calls
     assert r1.json()["report_integrity_hash"] == r2.json()["report_integrity_hash"]
+
+
+def test_policy_history_lists_versions(setup):
+    """GET /api/v1/policy/history returns ordered policy versions for admin and auditor."""
+    # Trigger a policy update so there are at least 2 versions
+    setup["client"].patch(
+        "/api/v1/policy",
+        json={"changes": {"match_threshold": 0.58}},
+        headers={
+            "Authorization": f"Bearer {setup['admin_token']}",
+            "X-CSRF-Token": setup["csrf_token"],
+        },
+    )
+    res = setup["client"].get(
+        "/api/v1/policy/history",
+        headers={"Authorization": f"Bearer {setup['auditor_token']}"},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["total"] >= 2
+    versions = [item["config_version"] for item in data["items"]]
+    assert versions == sorted(versions, reverse=True)
+    assert data["items"][0]["is_active"] is True
