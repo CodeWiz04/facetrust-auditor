@@ -15,8 +15,10 @@ from app.core.time import utcnow
 from app.models.policy import PolicyVersion, SystemPolicy
 from app.schemas.policy import (
     ChangeRecord,
+    PolicyHistoryResponse,
     PolicyResponse,
     PolicyUpdateResponse,
+    PolicyVersionSummary,
 )
 from engine.errors import EngineError
 from engine.hashing import canonical_json, config_hash
@@ -150,6 +152,42 @@ def update_system_policy(
         applied_by=actor_id,
         applied_at=applied_time,
     )
+
+
+def get_policy_history(db: Session, limit: int = 50) -> PolicyHistoryResponse:
+    """Return ordered system policy version history for audit review."""
+    # Ensure genesis policy exists if table is empty
+    get_active_system_policy(db)
+
+    rows = list(
+        db.scalars(
+            select(SystemPolicy)
+            .order_by(desc(SystemPolicy.config_version))
+            .limit(limit)
+        ).all()
+    )
+    items = []
+    for row in rows:
+        try:
+            raw_changes = json.loads(row.changes_json or "[]")
+        except (TypeError, ValueError):
+            raw_changes = []
+        changes = [
+            ChangeRecord(key=c["key"], old=c.get("old"), new=c.get("new"))
+            for c in raw_changes
+            if isinstance(c, dict) and "key" in c
+        ]
+        items.append(
+            PolicyVersionSummary(
+                config_version=row.config_version,
+                config_hash=row.config_hash,
+                changes=changes,
+                is_active=row.is_active,
+                applied_by=row.applied_by,
+                applied_at=row.applied_at,
+            )
+        )
+    return PolicyHistoryResponse(items=items, total=len(items))
 
 
 def _latest(db: Session) -> PolicyVersion | None:
