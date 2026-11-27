@@ -14,6 +14,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -34,7 +35,7 @@ from app.schemas.evaluation import (
     ThresholdEvalRequest,
     ThresholdEvalResponse,
 )
-from app.services import evaluation_service
+from app.services import evaluation_service, report_service
 
 router = APIRouter(prefix="/evaluations", tags=["evaluations"])
 
@@ -198,3 +199,33 @@ def get_evaluation(
         "created_at": run.created_at.isoformat(),
         "results": results_data,
     }
+
+
+@router.get(
+    "/{run_id}/export",
+    status_code=status.HTTP_200_OK,
+    summary="Export sanitized evidence report for a specific evaluation run",
+)
+def export_evaluation_run(
+    run_id: str,
+    format: str = Query(default="json", pattern="^(json|csv)$", description="Export format: json or csv"),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Export a PII-free JSON or CSV evidence report for a specific evaluation run."""
+    # Ensure the run exists (raises NOT-FOUND if missing)
+    evaluation_service.get_evaluation_run(db=db, run_id=run_id)
+
+    if format == "csv":
+        csv_bytes = report_service.build_csv_report(db=db)
+        return Response(
+            content=csv_bytes,
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=evaluation_{run_id}.csv"},
+        )
+
+    report = report_service.build_json_report(db=db, run_id=run_id)
+    return Response(
+        content=json.dumps(report, indent=2, ensure_ascii=True),
+        media_type="application/json",
+        headers={"Content-Disposition": f"attachment; filename=evaluation_{run_id}.json"},
+    )
