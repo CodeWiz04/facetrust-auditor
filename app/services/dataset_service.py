@@ -303,3 +303,24 @@ def withdraw_consent(
     )
 
     return subject
+
+
+def get_dataset_summary(db: Session) -> dict[str, object]:
+    """Return PII-free aggregate dataset statistics for admin/auditor overview."""
+    subjects = list(db.scalars(select(Subject)).all())
+    by_consent_status: dict[str, int] = {}
+    by_group: dict[str, int] = {}
+    for sub in subjects:
+        by_consent_status[sub.consent_status] = by_consent_status.get(sub.consent_status, 0) + 1
+        by_group[sub.group] = by_group.get(sub.group, 0) + 1
+
+    total_images = len(list(db.scalars(select(SubjectImage.id)).all()))
+    total_embeddings = len(list(db.scalars(select(BiometricEmbedding.id)).all()))
+
+    return {
+        "total_subjects": len(subjects),
+        "total_images": total_images,
+        "total_embeddings": total_embeddings,
+        "by_consent_status": by_consent_status,
+        "by_group": by_group,
+    }

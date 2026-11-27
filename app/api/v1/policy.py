@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, require_roles
 from app.core.rate_limit import client_ip
 from app.models.user import User, UserRole
-from app.schemas.policy import PolicyResponse, PolicyUpdateRequest, PolicyUpdateResponse
+from app.schemas.policy import (
+    PolicyHistoryResponse,
+    PolicyResponse,
+    PolicyUpdateRequest,
+    PolicyUpdateResponse,
+)
 from app.services import policy_service
 
 router = APIRouter(prefix="/policy", tags=["policy"])
 
 _admins_only = require_roles(UserRole.ADMIN.value)
+_readers = require_roles(UserRole.ADMIN.value, UserRole.AUDITOR.value)
 
 
 @router.get(
@@ -51,3 +57,18 @@ def update_policy(
         actor_role=actor.role,
         ip=ip,
     )
+
+
+@router.get(
+    "/history",
+    response_model=PolicyHistoryResponse,
+    status_code=status.HTTP_200_OK,
+    summary="List system policy version history (admin/auditor)",
+)
+def get_policy_history(
+    limit: int = Query(default=50, ge=1, le=200, description="Maximum number of policy versions to return"),
+    _: User = Depends(_readers),
+    db: Session = Depends(get_db),
+) -> PolicyHistoryResponse:
+    """Return ordered system policy version history for audit review."""
+    return policy_service.get_policy_history(db=db, limit=limit)
