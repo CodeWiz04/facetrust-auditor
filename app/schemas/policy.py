@@ -33,7 +33,27 @@ class PolicyResponse(BaseModel):
     config: dict[str, Any]
     tunables: list[str]
     applied_by: str | None = None
-    applied_at: datetime | None = None
+    applied_at: datetime
+
+
+class PolicyVersionSummary(BaseModel):
+    """Summary of a single historical system policy version."""
+
+    config_version: int
+    config_hash: str
+    changes: list[ChangeRecord]
+    is_active: bool
+    applied_by: str | None = None
+    applied_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PolicyHistoryResponse(BaseModel):
+    """Ordered list of system policy versions for audit review."""
+
+    items: list[PolicyVersionSummary]
+    total: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -47,3 +67,23 @@ class PolicyUpdateResponse(BaseModel):
     config: dict[str, Any]
     applied_by: str | None = None
     applied_at: datetime
+
+
+class PolicyVersionSummary(BaseModel):
+    """Summary of a single historical system policy version."""
+
+    config_version: int
+    config_hash: str
+    changes: list[ChangeRecord]
+    is_active: bool
+    applied_by: str | None = None
+    applied_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PolicyHistoryResponse(BaseModel):
+    """Ordered list of system policy versions for audit review."""
+
+    items: list[PolicyVersionSummary]
+    total: int
