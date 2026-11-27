@@ -118,27 +118,6 @@ def create_subject(
     return subject
 
 
-def get_dataset_summary(db: Session) -> dict[str, object]:
-    """Return PII-free aggregate dataset statistics for admin/auditor overview."""
-    subjects = list(db.scalars(select(Subject)).all())
-    by_consent_status: dict[str, int] = {}
-    by_group: dict[str, int] = {}
-    for sub in subjects:
-        by_consent_status[sub.consent_status] = by_consent_status.get(sub.consent_status, 0) + 1
-        by_group[sub.group] = by_group.get(sub.group, 0) + 1
-
-    total_images = len(list(db.scalars(select(SubjectImage.id)).all()))
-    total_embeddings = len(list(db.scalars(select(BiometricEmbedding.id)).all()))
-
-    return {
-        "total_subjects": len(subjects),
-        "total_images": total_images,
-        "total_embeddings": total_embeddings,
-        "by_consent_status": by_consent_status,
-        "by_group": by_group,
-    }
-
-
 def get_subject(db: Session, subject_id: str) -> Subject:
     """Fetch subject by internal UUID or subject_code."""
     subject = db.scalar(
@@ -149,27 +128,6 @@ def get_subject(db: Session, subject_id: str) -> Subject:
     if not subject:
         raise AppError("NOT-FOUND", detail=f"Subject '{subject_id}' not found")
     return subject
-
-
-def get_dataset_summary(db: Session) -> dict[str, object]:
-    """Return PII-free aggregate dataset statistics for admin/auditor overview."""
-    subjects = list(db.scalars(select(Subject)).all())
-    by_consent_status: dict[str, int] = {}
-    by_group: dict[str, int] = {}
-    for sub in subjects:
-        by_consent_status[sub.consent_status] = by_consent_status.get(sub.consent_status, 0) + 1
-        by_group[sub.group] = by_group.get(sub.group, 0) + 1
-
-    total_images = len(list(db.scalars(select(SubjectImage.id)).all()))
-    total_embeddings = len(list(db.scalars(select(BiometricEmbedding.id)).all()))
-
-    return {
-        "total_subjects": len(subjects),
-        "total_images": total_images,
-        "total_embeddings": total_embeddings,
-        "by_consent_status": by_consent_status,
-        "by_group": by_group,
-    }
 
 
 def list_subjects(
@@ -295,28 +253,7 @@ def ingest_subject_image(
         },
     )
 
-    return subject
-
-
-def get_dataset_summary(db: Session) -> dict[str, object]:
-    """Return PII-free aggregate dataset statistics for admin/auditor overview."""
-    subjects = list(db.scalars(select(Subject)).all())
-    by_consent_status: dict[str, int] = {}
-    by_group: dict[str, int] = {}
-    for sub in subjects:
-        by_consent_status[sub.consent_status] = by_consent_status.get(sub.consent_status, 0) + 1
-        by_group[sub.group] = by_group.get(sub.group, 0) + 1
-
-    total_images = len(list(db.scalars(select(SubjectImage.id)).all()))
-    total_embeddings = len(list(db.scalars(select(BiometricEmbedding.id)).all()))
-
-    return {
-        "total_subjects": len(subjects),
-        "total_images": total_images,
-        "total_embeddings": total_embeddings,
-        "by_consent_status": by_consent_status,
-        "by_group": by_group,
-    }_image
+    return subject_image
 
 
 def get_decrypted_image(subject_image: SubjectImage) -> bytes:
