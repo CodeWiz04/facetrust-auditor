@@ -1,112 +1,40 @@
-"""Integration tests for policy administration and sanitized report export endpoints."""
+"""Integration tests for policy administration and sanitized report export endpoints.
+
+Uses the full app (conftest `client` / `api` fixtures).
+"""
 
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
-
 import pytest
-from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from app.api.deps import get_db
-from app.api.v1.policy import router as policy_router
-from app.api.v1.reports import router as reports_router
-from app.core.crypto import generate_biometric_key, set_active_key
-from app.core.errors import register_exception_handlers
-from app.core.security import generate_token, hash_password, hash_token
-from app.core.time import utcnow
-from app.db.base import Base
-from app.models.session import UserSession
-from app.models.user import User, UserRole
-
-
-def _make_app(session_factory, role_override: str = UserRole.ADMIN.value) -> tuple[FastAPI, dict]:
-    """Build a minimal FastAPI app with policy and reports routers, injecting a mock session."""
-    app = FastAPI()
-    register_exception_handlers(app)
-    app.include_router(policy_router, prefix="/api/v1")
-    app.include_router(reports_router, prefix="/api/v1")
-
-    def override_get_db():
-        db = session_factory()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = override_get_db
-    return app
+from app.models.user import UserRole
+from tests.conftest import ApiHelper
 
 
 @pytest.fixture
-def setup(tmp_path):
-    """Isolated in-memory SQLite fixture with an admin user and a live session."""
-    test_key = generate_biometric_key()
-    set_active_key(test_key)
-
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-        echo=False,
+def auth_users(api: ApiHelper):
+    """Set up admin and auditor users with active sessions on the full app."""
+    # First registered user is automatically ADMIN
+    api.register_and_login("admin@example.com", "Admin12345!Secure")
+    
+    # Register second user (starts as ANALYST) and promote to AUDITOR
+    created = api.register("auditor@example.com", "Audit12345!Secure").json()
+    role_res = api.client.patch(
+        f"/api/v1/users/{created['id']}/role",
+        json={"role": UserRole.AUDITOR.value},
+        headers=api.csrf_headers(),
     )
-    Base.metadata.create_all(bind=engine)
-    SessionFactory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    assert role_res.status_code == 200, role_res.text
 
-    db = SessionFactory()
-
-    # Admin user
-    admin = User(
-        email="admin@test.local",
-        password_hash=hash_password("Admin12345!Secure"),
-        role=UserRole.ADMIN.value,
-        is_active=True,
-    )
-    db.add(admin)
-
-    # Auditor user (read-only for reports)
-    auditor = User(
-        email="auditor@test.local",
-        password_hash=hash_password("Audit12345!Secure"),
-        role=UserRole.AUDITOR.value,
-        is_active=True,
-    )
-    db.add(auditor)
-    db.flush()
-
-    # Active sessions for each
-    admin_token = generate_token()
-    auditor_token = generate_token()
-    csrf_token = generate_token()
-
-    db.add(UserSession(
-        user_id=admin.id,
-        token_hash=hash_token(admin_token),
-        csrf_hash=hash_token(csrf_token),
-        expires_at=utcnow() + timedelta(hours=8),
-    ))
-    db.add(UserSession(
-        user_id=auditor.id,
-        token_hash=hash_token(auditor_token),
-        csrf_hash=hash_token(csrf_token),
-        expires_at=utcnow() + timedelta(hours=8),
-    ))
-    db.commit()
-    db.close()
-
-    app = _make_app(SessionFactory)
-
-    with TestClient(app) as client:
+    with TestClient(api.client.app) as auditor_client:
+        auditor_api = ApiHelper(auditor_client)
+        login_res = auditor_api.login("auditor@example.com", "Audit12345!Secure")
+        assert login_res.status_code == 200, login_res.text
         yield {
-            "client": client,
-            "admin_token": admin_token,
-            "auditor_token": auditor_token,
-            "csrf_token": csrf_token,
-            "SessionFactory": SessionFactory,
+            "admin": api,
+            "auditor": auditor_api,
         }
 
 
@@ -114,18 +42,16 @@ def setup(tmp_path):
 # Policy tests
 # ---------------------------------------------------------------------------
 
-def test_get_policy_requires_admin(setup):
+def test_get_policy_requires_admin(client: TestClient):
     """Non-authenticated requests to policy endpoint must be rejected."""
-    res = setup["client"].get("/api/v1/policy")
+    res = client.get("/api/v1/policy")
     assert res.status_code in (401, 403)
 
 
-def test_get_policy_genesis_defaults(setup):
+def test_get_policy_genesis_defaults(auth_users):
     """First GET of policy auto-initializes the genesis config from defaults."""
-    res = setup["client"].get(
-        "/api/v1/policy",
-        headers={"Authorization": f"Bearer {setup['admin_token']}"},
-    )
+    admin: ApiHelper = auth_users["admin"]
+    res = admin.client.get("/api/v1/policy")
     assert res.status_code == 200
     data = res.json()
     assert "config_version" in data
@@ -136,15 +62,13 @@ def test_get_policy_genesis_defaults(setup):
     assert "match_threshold" in data["tunables"]
 
 
-def test_update_policy_valid_tunable(setup):
+def test_update_policy_valid_tunable(auth_users):
     """Admin can update an allow-listed parameter, and audit event is emitted."""
-    res = setup["client"].patch(
+    admin: ApiHelper = auth_users["admin"]
+    res = admin.client.patch(
         "/api/v1/policy",
         json={"changes": {"match_threshold": 0.6}},
-        headers={
-            "Authorization": f"Bearer {setup['admin_token']}",
-            "X-CSRF-Token": setup["csrf_token"],
-        },
+        headers=admin.csrf_headers(),
     )
     assert res.status_code == 200
     data = res.json()
@@ -157,58 +81,46 @@ def test_update_policy_valid_tunable(setup):
     assert data["config_version"] >= 2
 
 
-def test_update_policy_forbidden_key_rejected(setup):
+def test_update_policy_forbidden_key_rejected(auth_users):
     """Updating a non-allow-listed key (limits.*, config_version) must fail with EngineError."""
-    res = setup["client"].patch(
+    admin: ApiHelper = auth_users["admin"]
+    res = admin.client.patch(
         "/api/v1/policy",
         json={"changes": {"limits.max_image_bytes": 999999}},
-        headers={
-            "Authorization": f"Bearer {setup['admin_token']}",
-            "X-CSRF-Token": setup["csrf_token"],
-        },
+        headers=admin.csrf_headers(),
     )
     assert res.status_code in (400, 422)
 
 
-def test_update_policy_out_of_range_rejected(setup):
+def test_update_policy_out_of_range_rejected(auth_users):
     """Out-of-range threshold value must be rejected."""
-    res = setup["client"].patch(
+    admin: ApiHelper = auth_users["admin"]
+    res = admin.client.patch(
         "/api/v1/policy",
         json={"changes": {"match_threshold": 2.5}},
-        headers={
-            "Authorization": f"Bearer {setup['admin_token']}",
-            "X-CSRF-Token": setup["csrf_token"],
-        },
+        headers=admin.csrf_headers(),
     )
     assert res.status_code in (400, 422)
 
 
-def test_update_policy_no_changes_no_version_bump(setup):
+def test_update_policy_no_changes_no_version_bump(auth_users):
     """Applying same values as current config returns empty changes list."""
+    admin: ApiHelper = auth_users["admin"]
     # First set a known value
-    setup["client"].patch(
+    admin.client.patch(
         "/api/v1/policy",
         json={"changes": {"match_threshold": 0.5}},
-        headers={
-            "Authorization": f"Bearer {setup['admin_token']}",
-            "X-CSRF-Token": setup["csrf_token"],
-        },
+        headers=admin.csrf_headers(),
     )
     # Get the current version
-    get_res = setup["client"].get(
-        "/api/v1/policy",
-        headers={"Authorization": f"Bearer {setup['admin_token']}"},
-    )
+    get_res = admin.client.get("/api/v1/policy")
     version_before = get_res.json()["config_version"]
 
     # Apply the exact same value again
-    res = setup["client"].patch(
+    res = admin.client.patch(
         "/api/v1/policy",
         json={"changes": {"match_threshold": 0.5}},
-        headers={
-            "Authorization": f"Bearer {setup['admin_token']}",
-            "X-CSRF-Token": setup["csrf_token"],
-        },
+        headers=admin.csrf_headers(),
     )
     assert res.status_code == 200
     assert res.json()["changes"] == []
@@ -219,18 +131,16 @@ def test_update_policy_no_changes_no_version_bump(setup):
 # Report export tests
 # ---------------------------------------------------------------------------
 
-def test_json_report_requires_auth(setup):
+def test_json_report_requires_auth(client: TestClient):
     """Unauthenticated access to reports must be rejected."""
-    res = setup["client"].get("/api/v1/reports/json")
+    res = client.get("/api/v1/reports/json")
     assert res.status_code in (401, 403)
 
 
-def test_json_report_auditor_access(setup):
+def test_json_report_auditor_access(auth_users):
     """Auditor (read-only) can access JSON report."""
-    res = setup["client"].get(
-        "/api/v1/reports/json",
-        headers={"Authorization": f"Bearer {setup['auditor_token']}"},
-    )
+    auditor: ApiHelper = auth_users["auditor"]
+    res = auditor.client.get("/api/v1/reports/json")
     assert res.status_code == 200
     data = res.json()
     assert data["report_type"] == "facetrust_auditor_evidence_report"
@@ -239,29 +149,23 @@ def test_json_report_auditor_access(setup):
     assert "personal identifiable information" in data["disclaimer"].lower()
 
 
-def test_json_report_contains_no_pii_fields(setup):
+def test_json_report_contains_no_pii_fields(auth_users):
     """JSON report must not expose email, name, password_hash or token fields."""
-    res = setup["client"].get(
-        "/api/v1/reports/json",
-        headers={"Authorization": f"Bearer {setup['admin_token']}"},
-    )
+    admin: ApiHelper = auth_users["admin"]
+    res = admin.client.get("/api/v1/reports/json")
     assert res.status_code == 200
     report_text = res.text.lower()
-    # None of these PII/secret fields should appear
-    for forbidden in ("password_hash", "token_hash", "csrf_hash", "@test.local"):
+    for forbidden in ("password_hash", "token_hash", "csrf_hash", "@example.com"):
         assert forbidden not in report_text, f"PII field '{forbidden}' found in report"
 
 
-def test_csv_report_admin_access(setup):
+def test_csv_report_admin_access(auth_users):
     """Admin can download the CSV report and it has valid CSV structure."""
-    res = setup["client"].get(
-        "/api/v1/reports/csv",
-        headers={"Authorization": f"Bearer {setup['admin_token']}"},
-    )
+    admin: ApiHelper = auth_users["admin"]
+    res = admin.client.get("/api/v1/reports/csv")
     assert res.status_code == 200
     assert "text/csv" in res.headers["content-type"]
     lines = res.text.strip().split("\n")
-    # At minimum, the CSV header row should be present
     assert len(lines) >= 1
     header = lines[0].lower()
     assert "run_id" in header
@@ -269,30 +173,25 @@ def test_csv_report_admin_access(setup):
     assert "model_name" in header
 
 
-def test_json_report_integrity_hash_is_deterministic(setup):
+def test_json_report_integrity_hash_is_deterministic(auth_users):
     """Requesting the same empty report twice should yield the same integrity hash."""
-    headers = {"Authorization": f"Bearer {setup['admin_token']}"}
-    r1 = setup["client"].get("/api/v1/reports/json", headers=headers)
-    r2 = setup["client"].get("/api/v1/reports/json", headers=headers)
-    # Integrity hashes should match if data hasn't changed between calls
+    admin: ApiHelper = auth_users["admin"]
+    r1 = admin.client.get("/api/v1/reports/json")
+    r2 = admin.client.get("/api/v1/reports/json")
     assert r1.json()["report_integrity_hash"] == r2.json()["report_integrity_hash"]
 
 
-def test_policy_history_lists_versions(setup):
+def test_policy_history_lists_versions(auth_users):
     """GET /api/v1/policy/history returns ordered policy versions for admin and auditor."""
+    admin: ApiHelper = auth_users["admin"]
+    auditor: ApiHelper = auth_users["auditor"]
     # Trigger a policy update so there are at least 2 versions
-    setup["client"].patch(
+    admin.client.patch(
         "/api/v1/policy",
         json={"changes": {"match_threshold": 0.58}},
-        headers={
-            "Authorization": f"Bearer {setup['admin_token']}",
-            "X-CSRF-Token": setup["csrf_token"],
-        },
+        headers=admin.csrf_headers(),
     )
-    res = setup["client"].get(
-        "/api/v1/policy/history",
-        headers={"Authorization": f"Bearer {setup['auditor_token']}"},
-    )
+    res = auditor.client.get("/api/v1/policy/history")
     assert res.status_code == 200
     data = res.json()
     assert data["total"] >= 2
