@@ -32,11 +32,10 @@ from app.models.dataset import (
     Subject,
     SubjectImage,
 )
-from app.schemas.dataset import SubjectCreate
+from app.services import policy_service
 from engine.consent import validate_consent_record
 from engine.dataset_validator import ValidatedImage, validate_image
 from engine.errors import EngineError
-from engine.policy import load_default_config
 
 SAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]")
 
@@ -175,7 +174,7 @@ def ingest_subject_image(
         )
 
     # Image validation using security engine
-    config = load_default_config()
+    config = policy_service.get_active_config(db)
     limits = config["limits"]
     validated: ValidatedImage = validate_image(
         file_bytes, limits=limits, claimed_name=original_filename

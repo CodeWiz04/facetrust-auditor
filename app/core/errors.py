@@ -45,6 +45,7 @@ ERROR_CATALOG: dict[str, tuple[int, str]] = {
     "RATE-LIMITED": (429, "Too many requests. Slow down and try again."),
     # Crypto / storage
     "FILE-CORRUPT": (422, "The file could not be read."),
+    "FILE-TOO-LARGE": (400, "The file exceeds the maximum allowed size."),
     "DEL-VERIFY-FAILED": (409, "Verification failed."),
     "DEL-CONFIRMATION-REQUIRED": (400, "Deletion requires explicit confirmation."),
     "DEL-RECEIPT-NOT-FOUND": (404, "Deletion receipt not found."),

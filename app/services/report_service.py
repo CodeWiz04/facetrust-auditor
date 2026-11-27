@@ -81,13 +81,19 @@ def build_json_report(
         "by_consent_status": {},
         "by_group": {},
     }
+    raw_by_group: dict[str, int] = {}
     for sub in subjects:
         subject_summary["by_consent_status"][sub.consent_status] = (
             subject_summary["by_consent_status"].get(sub.consent_status, 0) + 1
         )
-        subject_summary["by_group"][sub.group] = (
-            subject_summary["by_group"].get(sub.group, 0) + 1
-        )
+        grp = sub.group or "undisclosed"
+        raw_by_group[grp] = raw_by_group.get(grp, 0) + 1
+
+    for grp, count in raw_by_group.items():
+        if count < 3:
+            subject_summary["by_group"][grp] = {"count": None, "suppressed": True}
+        else:
+            subject_summary["by_group"][grp] = {"count": count, "suppressed": False}
 
     # Audit tail (last N events, no PII)
     audit_rows = list(
@@ -100,7 +106,7 @@ def build_json_report(
             "seq": a.seq,
             "event": a.event,
             "actor_role": a.actor_role,
-            "hash": a.hash,
+            "hash": a.entry_hash,
             "created_at": a.created_at.isoformat(),
         }
         for a in reversed(audit_rows)
@@ -124,8 +130,8 @@ def build_json_report(
     return report
 
 
-def build_csv_report(db: Session) -> bytes:
-    """Build a CSV report of all evaluation run summaries with subgroup metrics."""
+def build_csv_report(db: Session, run_id: str | None = None) -> bytes:
+    """Build a CSV report of all or a specific evaluation run summary with subgroup metrics."""
     buf = io.StringIO()
     writer = csv.writer(buf)
 
@@ -137,7 +143,10 @@ def build_csv_report(db: Session) -> bytes:
         "sample_count", "warning",
     ])
 
-    runs = list(db.scalars(select(EvaluationRun).order_by(EvaluationRun.created_at)).all())
+    query = select(EvaluationRun)
+    if run_id:
+        query = query.where(EvaluationRun.id == run_id)
+    runs = list(db.scalars(query.order_by(EvaluationRun.created_at)).all())
     for run in runs:
         results = list(
             db.scalars(select(EvaluationResult).where(EvaluationResult.run_id == run.id)).all()

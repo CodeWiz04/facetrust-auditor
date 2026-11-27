@@ -1,4 +1,4 @@
-"""Dataset and consent management API endpoints (FR-1, FR-6)."""
+"""Dataset and consent management API endpoints (FR-1)."""
 
 from __future__ import annotations
 
@@ -13,8 +13,9 @@ from fastapi import (
 )
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
-from app.core.rate_limit import client_ip
+from app.api.deps import get_db, require_csrf, require_roles_audited
+from app.core.rate_limit import client_ip, enforce
+from app.models.user import User, UserRole
 from app.schemas.dataset import (
     ConsentWithdrawRequest,
     ImageListResponse,
@@ -23,10 +24,19 @@ from app.schemas.dataset import (
     SubjectListResponse,
     SubjectResponse,
 )
-from app.schemas.deletion import DeletionReceipt, SubjectDeletionRequest
-from app.services import dataset_service, deletion_service
+from app.services import dataset_service, policy_service
+from engine.errors import EngineError
 
 router = APIRouter(prefix="/dataset", tags=["dataset"])
+
+ADMIN = UserRole.ADMIN.value
+ANALYST = UserRole.ANALYST.value
+AUDITOR = UserRole.AUDITOR.value
+
+_can_create = require_roles_audited("dataset.create", ADMIN, ANALYST)
+_can_upload = require_roles_audited("dataset.upload", ADMIN, ANALYST)
+_can_withdraw = require_roles_audited("dataset.withdraw_consent", ADMIN, ANALYST)
+_can_read = require_roles_audited("dataset.read", ADMIN, ANALYST, AUDITOR)
 
 
 def _subject_to_response(subject) -> SubjectResponse:
@@ -52,11 +62,20 @@ def _subject_to_response(subject) -> SubjectResponse:
 def create_subject(
     payload: SubjectCreate,
     request: Request,
+    user: User = Depends(_can_create),
+    _csrf: None = Depends(require_csrf),
     db: Session = Depends(get_db),
 ) -> SubjectResponse:
     """Register a new volunteer subject with validated consent statement and subgroup labels."""
+    enforce(request, "dataset.create", 30, 60, identity=user.id)
     ip = client_ip(request)
-    subject = dataset_service.create_subject(db, payload=payload, ip=ip)
+    subject = dataset_service.create_subject(
+        db,
+        payload=payload,
+        actor_id=user.id,
+        actor_role=user.role,
+        ip=ip,
+    )
     return _subject_to_response(subject)
 
 
@@ -72,6 +91,7 @@ def list_subjects(
     ),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
+    _: User = Depends(_can_read),
     db: Session = Depends(get_db),
 ) -> SubjectListResponse:
     """List consented subjects with demographic labels and consent status."""
@@ -91,6 +111,7 @@ def list_subjects(
 )
 def get_subject(
     subject_id: str,
+    _: User = Depends(_can_read),
     db: Session = Depends(get_db),
 ) -> SubjectResponse:
     """Retrieve details for a single consented subject."""
@@ -108,11 +129,30 @@ async def upload_subject_image(
     subject_id: str,
     request: Request,
     file: UploadFile = File(..., description="JPEG or PNG face image"),
+    user: User = Depends(_can_upload),
+    _csrf: None = Depends(require_csrf),
     db: Session = Depends(get_db),
 ) -> ImageUploadResponse:
     """Ingest a face image: validates magic bytes, size, dimensions, pixel decode, EXIF strip, and encrypts at rest."""
+    enforce(request, "dataset.upload", 30, 60, identity=user.id)
+    
+    cfg = policy_service.get_active_config(db)
+    limits = cfg.get("limits", {})
+    max_bytes = limits.get("max_image_bytes", 10_000_000)
+
+    cl = request.headers.get("content-length")
+    if cl is not None:
+        try:
+            if int(cl) > max_bytes:
+                raise EngineError("FILE-TOO-LARGE", f"content-length {cl} exceeds max {max_bytes}")
+        except ValueError:
+            pass
+
+    content = await file.read(max_bytes + 1)
+    if len(content) > max_bytes:
+        raise EngineError("FILE-TOO-LARGE", f"file bytes exceed max {max_bytes}")
+
     ip = client_ip(request)
-    content = await file.read()
     filename = file.filename or "uploaded_face.png"
 
     subject_image = dataset_service.ingest_subject_image(
@@ -120,6 +160,8 @@ async def upload_subject_image(
         subject_id=subject_id,
         file_bytes=content,
         original_filename=filename,
+        actor_id=user.id,
+        actor_role=user.role,
         ip=ip,
     )
     return ImageUploadResponse.model_validate(subject_image)
@@ -132,6 +174,7 @@ async def upload_subject_image(
 )
 def list_subject_images(
     subject_id: str,
+    _: User = Depends(_can_read),
     db: Session = Depends(get_db),
 ) -> ImageListResponse:
     """List all encrypted face images enrolled for the specified subject."""
@@ -150,55 +193,21 @@ def list_subject_images(
 )
 def withdraw_consent(
     subject_id: str,
+    payload: ConsentWithdrawRequest,
     request: Request,
-    payload: ConsentWithdrawRequest | None = None,
+    user: User = Depends(_can_withdraw),
+    _csrf: None = Depends(require_csrf),
     db: Session = Depends(get_db),
 ) -> SubjectResponse:
     """Withdraw a subject's consent to prevent further processing or image collection."""
+    enforce(request, "dataset.withdraw_consent", 10, 60, identity=user.id)
     ip = client_ip(request)
-    reason = payload.reason if payload else None
-    subject = dataset_service.withdraw_consent(db, subject_id=subject_id, reason=reason, ip=ip)
+    subject = dataset_service.withdraw_consent(
+        db,
+        subject_id=subject_id,
+        reason=payload.reason,
+        actor_id=user.id,
+        actor_role=user.role,
+        ip=ip,
+    )
     return _subject_to_response(subject)
-
-
-
-@router.delete(
-    "/subjects/{subject_id}",
-    response_model=DeletionReceipt,
-    summary="Permanently delete subject biometrics and records (FR-6, T6)",
-)
-def delete_subject(
-    subject_id: str,
-    request: Request,
-    payload: SubjectDeletionRequest | None = None,
-    db: Session = Depends(get_db),
-) -> DeletionReceipt:
-    """Permanently shred all biometrics, remove database rows, and record an immutable PII-free tombstone."""
-    ip = client_ip(request)
-    return deletion_service.execute_privacy_deletion(
-        db=db,
-        subject_id=subject_id,
-        request_data=payload,
-        ip=ip,
-    )
-
-
-@router.post(
-    "/subjects/{subject_id}/shred",
-    response_model=DeletionReceipt,
-    summary="Cryptographically shred biometrics with explicit confirmation",
-)
-def shred_subject_biometrics(
-    subject_id: str,
-    request: Request,
-    payload: SubjectDeletionRequest,
-    db: Session = Depends(get_db),
-) -> DeletionReceipt:
-    """Enforces explicit confirmation before permanently destroying all subject images and vectors."""
-    ip = client_ip(request)
-    return deletion_service.execute_privacy_deletion(
-        db=db,
-        subject_id=subject_id,
-        request_data=payload,
-        ip=ip,
-    )
