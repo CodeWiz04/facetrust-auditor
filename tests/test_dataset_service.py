@@ -238,3 +238,23 @@ def test_get_decrypted_image_file_missing(db_session: Session, sample_png_bytes:
         get_decrypted_image(img_rec)
     assert exc_info.value.code == "NOT-FOUND"
     assert exc_info.value.status_code == 404
+
+
+def test_get_dataset_summary_counts(db_session: Session, sample_png_bytes: bytes):
+    from app.services.dataset_service import get_dataset_summary
+
+    payload = SubjectCreate(
+        subject_code="sub_summary_01",
+        consent_given=True,
+        consent_date=str(date.today()),
+        purpose="evaluation",
+        group="group_a",
+    )
+    subject = create_subject(db_session, payload)
+    ingest_subject_image(db_session, subject.id, sample_png_bytes, "photo.png")
+
+    summary = get_dataset_summary(db_session)
+    assert summary["total_subjects"] >= 1
+    assert summary["total_images"] >= 1
+    assert summary["by_group"]["group_a"] >= 1
+    assert summary["by_consent_status"]["granted"] >= 1
