@@ -279,20 +279,7 @@ body {
   margin-bottom: 6px;
 }
 
-.nav-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  user-select: none;
-  margin-bottom: 2px;
-}
+.
 
 .nav-item-content {
   display: flex;
