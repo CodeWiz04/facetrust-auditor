@@ -279,7 +279,20 @@ body {
   margin-bottom: 6px;
 }
 
-.
+.nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  margin-bottom: 2px;
+}
 
 .nav-item-content {
   display: flex;
@@ -331,40 +344,6 @@ body {
   display: block;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* Section Header */
-.section-header {
-  margin-bottom: 24px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-}
-
-.section-title {
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.section-subtitle {
-  color: var(--text-secondary);
-  font-size: 13px;
-  margin-top: 4px;
-}
-
-.section-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
 
 /* Common UI Cards & Panels */
 .card {
